@@ -1,11 +1,10 @@
-from sentence_transformers import SentenceTransformer
-
-model = SentenceTransformer(
-    "BAAI/bge-small-en-v1.5"
-)
+from app.services.embeddings.model_loader import get_model
 
 
 def get_embedding(text: str):
+
+    model = get_model()
+
     embedding = model.encode(
         text,
         normalize_embeddings=True
