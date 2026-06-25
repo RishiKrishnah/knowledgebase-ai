@@ -6,3 +6,4 @@ pydantic_settings==2.14.2
 qdrant_client==1.18.0
 sentence_transformers==5.5.1
 SQLAlchemy==2.0.51
+alembic==1.16.5

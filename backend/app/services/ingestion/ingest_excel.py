@@ -5,7 +5,9 @@ from qdrant_client.models import PointStruct
 from app.services.ingestion.excel_parser import load_excel
 from app.services.ingestion.document_builder import row_to_document
 from app.services.embeddings.bge_embedding import get_embedding
-from app.services.retrieval.qdrant_service import client
+from app.services.retrieval.client import get_qdrant_client
+
+client = get_qdrant_client()
 
 
 COLLECTION_NAME = "knowledge_chunks"

@@ -5,9 +5,14 @@
     project_prompt_generator.py
     project_prompt.txt
     docker-compose.yml
+    requirements.txt
     backend/
         requirements.txt
         data/
+        alembic/
+            env.py
+            versions/
+                64b9be734fe6_initial_schema.py
         app/
             __init__.py
             main.py
@@ -20,31 +25,57 @@
             db/
                 database.py
                 __init__.py
+                base.py
                 test_connection.py
+                session.py
             models/
                 __init__.py
+                document.py
+                message.py
+                chunk.py
+                knowledge_base.py
+                user.py
+                chat_session.py
             schemas/
                 __init__.py
                 chat_schema.py
                 question_schema.py
             services/
                 __init__.py
+                sql/
+                    validator.py
+                    formatter.py
+                    generator.py
                 llm/
                     __init__.py
                     openrouter_provider.py
                     prompt_builder.py
                     base.py
                     rag_service.py
+                conversation/
+                    __init__.py
+                    conversation_service.py
+                router/
+                    __init__.py
+                    intent_router.py
                 retrieval/
                     __init__.py
-                    qdrant_service.py
                     search.py
+                    client.py
                     test_search.py
                     create_collection.py
+                database/
+                    connector.py
+                    executor.py
+                    schema_cache.py
+                    inspector.py
+                    registry.py
                 embeddings/
                     __init__.py
                     model_loader.py
                     bge_embedding.py
+                chat/
+                    chat_service.py
                 ingestion/
                     __init__.py
                     excel_parser.py
@@ -670,9 +701,14 @@ print(f"Generated {OUTPUT_FILE}")
     project_prompt_generator.py
     project_prompt.txt
     docker-compose.yml
+    requirements.txt
     backend/
         requirements.txt
         data/
+        alembic/
+            env.py
+            versions/
+                64b9be734fe6_initial_schema.py
         app/
             __init__.py
             main.py
@@ -685,31 +721,57 @@ print(f"Generated {OUTPUT_FILE}")
             db/
                 database.py
                 __init__.py
+                base.py
                 test_connection.py
+                session.py
             models/
                 __init__.py
+                document.py
+                message.py
+                chunk.py
+                knowledge_base.py
+                user.py
+                chat_session.py
             schemas/
                 __init__.py
                 chat_schema.py
                 question_schema.py
             services/
                 __init__.py
+                sql/
+                    validator.py
+                    formatter.py
+                    generator.py
                 llm/
                     __init__.py
                     openrouter_provider.py
                     prompt_builder.py
                     base.py
                     rag_service.py
+                conversation/
+                    __init__.py
+                    conversation_service.py
+                router/
+                    __init__.py
+                    intent_router.py
                 retrieval/
                     __init__.py
-                    qdrant_service.py
                     search.py
+                    client.py
                     test_search.py
                     create_collection.py
+                database/
+                    connector.py
+                    executor.py
+                    schema_cache.py
+                    inspector.py
+                    registry.py
                 embeddings/
                     __init__.py
                     model_loader.py
                     bge_embedding.py
+                chat/
+                    chat_service.py
                 ingestion/
                     __init__.py
                     excel_parser.py
@@ -1294,6 +1356,21 @@ volumes:
 
 
 ================================================================================
+./requirements.txt
+================================================================================
+
+fastapi==0.138.0
+httpx==0.28.1
+pandas==3.0.3
+pydantic==2.13.4
+pydantic_settings==2.14.2
+qdrant_client==1.18.0
+sentence_transformers==5.5.1
+SQLAlchemy==2.0.51
+alembic==1.16.5
+
+
+================================================================================
 ./backend/requirements.txt
 ================================================================================
 
@@ -1575,6 +1652,221 @@ zed-msgs==5.1.1
 
 
 ================================================================================
+./backend/alembic/env.py
+================================================================================
+
+from logging.config import fileConfig
+
+from sqlalchemy import engine_from_config
+from sqlalchemy import pool
+
+from alembic import context
+from app.db.base import Base
+
+from app.models import *
+
+from app.core.config import settings
+
+# this is the Alembic Config object, which provides
+# access to the values within the .ini file in use.
+config = context.config
+
+config.set_main_option(
+    "sqlalchemy.url",
+    (
+        f"postgresql://"
+        f"{settings.POSTGRES_USER}:"
+        f"{settings.POSTGRES_PASSWORD}"
+        f"@{settings.POSTGRES_HOST}:"
+        f"{settings.POSTGRES_PORT}/"
+        f"{settings.POSTGRES_DB}"
+    ),
+)
+
+
+
+# Interpret the config file for Python logging.
+# This line sets up loggers basically.
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
+
+# add your model's MetaData object here
+# for 'autogenerate' support
+# from myapp import mymodel
+# target_metadata = mymodel.Base.metadata
+
+
+target_metadata = Base.metadata
+
+# other values from the config, defined by the needs of env.py,
+# can be acquired:
+# my_important_option = config.get_main_option("my_important_option")
+# ... etc.
+
+
+def run_migrations_offline() -> None:
+    """Run migrations in 'offline' mode.
+
+    This configures the context with just a URL
+    and not an Engine, though an Engine is acceptable
+    here as well.  By skipping the Engine creation
+    we don't even need a DBAPI to be available.
+
+    Calls to context.execute() here emit the given string to the
+    script output.
+
+    """
+    url = config.get_main_option("sqlalchemy.url")
+    context.configure(
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+    )
+
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+def run_migrations_online() -> None:
+    """Run migrations in 'online' mode.
+
+    In this scenario we need to create an Engine
+    and associate a connection with the context.
+
+    """
+    connectable = engine_from_config(
+        config.get_section(config.config_ini_section, {}),
+        prefix="sqlalchemy.",
+        poolclass=pool.NullPool,
+    )
+
+    with connectable.connect() as connection:
+        context.configure(
+            connection=connection, target_metadata=target_metadata
+        )
+
+        with context.begin_transaction():
+            context.run_migrations()
+
+
+if context.is_offline_mode():
+    run_migrations_offline()
+else:
+    run_migrations_online()
+
+
+
+================================================================================
+./backend/alembic/versions/64b9be734fe6_initial_schema.py
+================================================================================
+
+"""Initial schema
+
+Revision ID: 64b9be734fe6
+Revises: 
+Create Date: 2026-06-25 19:12:11.788055
+
+"""
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+
+
+# revision identifiers, used by Alembic.
+revision: str = '64b9be734fe6'
+down_revision: Union[str, Sequence[str], None] = None
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    """Upgrade schema."""
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.create_table('users',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('email', sa.String(length=255), nullable=False),
+    sa.Column('password_hash', sa.String(length=255), nullable=False),
+    sa.Column('role', sa.String(length=50), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
+    op.create_table('knowledge_bases',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('name', sa.String(length=255), nullable=False),
+    sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('owner_id', sa.UUID(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['owner_id'], ['users.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_knowledge_bases_name'), 'knowledge_bases', ['name'], unique=False)
+    op.create_table('chat_sessions',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('user_id', sa.UUID(), nullable=False),
+    sa.Column('knowledge_base_id', sa.UUID(), nullable=False),
+    sa.Column('title', sa.String(length=255), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['knowledge_base_id'], ['knowledge_bases.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('documents',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('knowledge_base_id', sa.UUID(), nullable=False),
+    sa.Column('filename', sa.String(length=255), nullable=False),
+    sa.Column('file_type', sa.String(length=50), nullable=False),
+    sa.Column('mime_type', sa.String(length=100), nullable=True),
+    sa.Column('file_size', sa.Integer(), nullable=True),
+    sa.Column('storage_path', sa.String(length=500), nullable=True),
+    sa.Column('status', sa.String(length=30), nullable=False),
+    sa.Column('processing_stage', sa.String(length=30), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['knowledge_base_id'], ['knowledge_bases.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('chunks',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('document_id', sa.UUID(), nullable=False),
+    sa.Column('qdrant_point_id', sa.String(length=100), nullable=False),
+    sa.Column('chunk_index', sa.Integer(), nullable=False),
+    sa.Column('token_count', sa.Integer(), nullable=True),
+    sa.Column('metadata_json', sa.Text(), nullable=True),
+    sa.Column('text', sa.Text(), nullable=False),
+    sa.ForeignKeyConstraint(['document_id'], ['documents.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('qdrant_point_id')
+    )
+    op.create_table('messages',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('session_id', sa.UUID(), nullable=False),
+    sa.Column('role', sa.String(length=20), nullable=False),
+    sa.Column('content', sa.Text(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['session_id'], ['chat_sessions.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    # ### end Alembic commands ###
+
+
+def downgrade() -> None:
+    """Downgrade schema."""
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_table('messages')
+    op.drop_table('chunks')
+    op.drop_table('documents')
+    op.drop_table('chat_sessions')
+    op.drop_index(op.f('ix_knowledge_bases_name'), table_name='knowledge_bases')
+    op.drop_table('knowledge_bases')
+    op.drop_index(op.f('ix_users_email'), table_name='users')
+    op.drop_table('users')
+    # ### end Alembic commands ###
+
+
+
+================================================================================
 ./backend/app/__init__.py
 ================================================================================
 
@@ -1663,7 +1955,16 @@ def semantic_search(request: QuestionRequest):
 from fastapi import APIRouter
 
 from app.schemas.chat_schema import ChatRequest
-from app.services.llm.rag_service import ask
+
+from app.services.router.intent_router import classify
+from app.services.router.intent_router import Intent
+
+from app.services.chat.chat_service import ask as chat_answer
+from app.services.llm.rag_service import ask as rag_answer
+
+from app.services.conversation.conversation_service import (
+    conversation_service,
+)
 
 router = APIRouter()
 
@@ -1671,12 +1972,44 @@ router = APIRouter()
 @router.post("/chat")
 async def chat(request: ChatRequest):
 
-    answer = await ask(
-        request.question
+    history = conversation_service.history(
+        request.session_id
+    )
+
+    intent = await classify(request.question)
+
+    if intent == Intent.CHAT:
+
+        answer = await chat_answer(
+            request.question,
+            history,
+        )
+
+    elif intent == Intent.DOCUMENT:
+
+        answer = await rag_answer(
+            request.question,
+        )
+
+    else:
+
+        answer = "Database module coming soon."
+
+    conversation_service.add_message(
+        request.session_id,
+        "user",
+        request.question,
+    )
+
+    conversation_service.add_message(
+        request.session_id,
+        "assistant",
+        answer,
     )
 
     return {
-        "answer": answer
+        "intent": intent.value,
+        "answer": answer,
     }
 
 
@@ -1685,7 +2018,6 @@ async def chat(request: ChatRequest):
 ================================================================================
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
 
@@ -1693,18 +2025,17 @@ from app.core.config import settings
 DATABASE_URL = (
     f"postgresql://"
     f"{settings.POSTGRES_USER}:"
-    f"{settings.POSTGRES_PASSWORD}@"
-    f"{settings.POSTGRES_HOST}:"
+    f"{settings.POSTGRES_PASSWORD}"
+    f"@{settings.POSTGRES_HOST}:"
     f"{settings.POSTGRES_PORT}/"
     f"{settings.POSTGRES_DB}"
 )
 
-engine = create_engine(DATABASE_URL)
-
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
+engine = create_engine(
+    DATABASE_URL,
+    echo=settings.DEBUG,
+    pool_pre_ping=True,
+    pool_recycle=3600,
 )
 
 
@@ -1713,6 +2044,20 @@ SessionLocal = sessionmaker(
 ================================================================================
 
 
+
+
+================================================================================
+./backend/app/db/base.py
+================================================================================
+
+from sqlalchemy.orm import DeclarativeBase
+
+
+class Base(DeclarativeBase):
+    """
+    Base class for all SQLAlchemy ORM models.
+    """
+    pass
 
 
 ================================================================================
@@ -1731,10 +2076,642 @@ with engine.connect() as connection:
 
 
 ================================================================================
+./backend/app/db/session.py
+================================================================================
+
+from sqlalchemy.orm import sessionmaker
+
+from app.db.database import engine
+
+
+SessionLocal = sessionmaker(
+    bind=engine,
+    autoflush=False,
+    autocommit=False,
+)
+
+
+def get_db():
+    db = SessionLocal()
+
+    try:
+        yield db
+
+    finally:
+        db.close()
+
+
+================================================================================
 ./backend/app/models/__init__.py
 ================================================================================
 
+from app.models.user import User
+from app.models.knowledge_base import KnowledgeBase
+from app.models.document import Document
+from app.models.chunk import Chunk
+from app.models.chat_session import ChatSession
+from app.models.message import Message
+from .database_connection import DatabaseConnection
 
+__all__ = [
+    "User",
+    "KnowledgeBase",
+    "Document",
+    "Chunk",
+    "ChatSession",
+    "Message",
+]
+
+
+================================================================================
+./backend/app/models/document.py
+================================================================================
+
+import uuid
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.knowledge_base import KnowledgeBase
+    from app.models.chunk import Chunk
+
+
+class Document(Base):
+    __tablename__ = "documents"
+
+    # ==========================
+    # Primary Key
+    # ==========================
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    # ==========================
+    # Foreign Keys
+    # ==========================
+
+    knowledge_base_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("knowledge_bases.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # ==========================
+    # File Information
+    # ==========================
+
+    filename: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    file_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+
+    mime_type: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    file_size: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    storage_path: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+    )
+
+    # ==========================
+    # Processing Status
+    # ==========================
+
+    status: Mapped[str] = mapped_column(
+        String(30),
+        default="uploaded",
+        nullable=False,
+    )
+
+    processing_stage: Mapped[str] = mapped_column(
+        String(30),
+        default="uploaded",
+        nullable=False,
+    )
+
+    # ==========================
+    # Timestamp
+    # ==========================
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    # ==========================
+    # Relationships
+    # ==========================
+
+    knowledge_base: Mapped["KnowledgeBase"] = relationship(
+        back_populates="documents",
+    )
+
+    chunks: Mapped[list["Chunk"]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+    )
+
+    # ==========================
+    # Representation
+    # ==========================
+
+    def __repr__(self) -> str:
+        return (
+            f"<Document("
+            f"id={self.id}, "
+            f"filename='{self.filename}', "
+            f"status='{self.status}'"
+            f")>"
+        )
+
+
+================================================================================
+./backend/app/models/message.py
+================================================================================
+
+import uuid
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.chat_session import ChatSession
+
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    # ==========================
+    # Primary Key
+    # ==========================
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    # ==========================
+    # Foreign Key
+    # ==========================
+
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("chat_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # ==========================
+    # Message Content
+    # ==========================
+
+    role: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+    )
+
+    content: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+
+    # ==========================
+    # Timestamp
+    # ==========================
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    # ==========================
+    # Relationship
+    # ==========================
+
+    session: Mapped["ChatSession"] = relationship(
+        back_populates="messages",
+    )
+
+    # ==========================
+    # Representation
+    # ==========================
+
+    def __repr__(self) -> str:
+        return (
+            f"<Message("
+            f"id={self.id}, "
+            f"role='{self.role}'"
+            f")>"
+        )
+
+
+================================================================================
+./backend/app/models/chunk.py
+================================================================================
+
+import uuid
+from typing import TYPE_CHECKING
+
+from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.document import Document
+
+
+class Chunk(Base):
+    __tablename__ = "chunks"
+
+    # ==========================
+    # Primary Key
+    # ==========================
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    # ==========================
+    # Foreign Key
+    # ==========================
+
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # ==========================
+    # Chunk Metadata
+    # ==========================
+
+    qdrant_point_id: Mapped[str] = mapped_column(
+        String(100),
+        unique=True,
+        nullable=False,
+    )
+
+    chunk_index: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    token_count: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    metadata_json: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    # ==========================
+    # Chunk Content
+    # ==========================
+
+    text: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+
+    # ==========================
+    # Relationship
+    # ==========================
+
+    document: Mapped["Document"] = relationship(
+        back_populates="chunks",
+    )
+
+    # ==========================
+    # Representation
+    # ==========================
+
+    def __repr__(self) -> str:
+        return (
+            f"<Chunk("
+            f"id={self.id}, "
+            f"chunk_index={self.chunk_index}"
+            f")>"
+        )
+
+
+================================================================================
+./backend/app/models/knowledge_base.py
+================================================================================
+
+import uuid
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.user import User
+    from app.models.document import Document
+    from app.models.chat_session import ChatSession
+
+
+class KnowledgeBase(Base):
+    __tablename__ = "knowledge_bases"
+
+    # ==========================
+    # Primary Key
+    # ==========================
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    # ==========================
+    # Knowledge Base Information
+    # ==========================
+
+    name: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        index=True,
+    )
+
+    description: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # ==========================
+    # Timestamps
+    # ==========================
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    # ==========================
+    # Relationships
+    # ==========================
+
+    owner: Mapped["User"] = relationship(
+        back_populates="knowledge_bases",
+    )
+
+    documents: Mapped[list["Document"]] = relationship(
+        back_populates="knowledge_base",
+        cascade="all, delete-orphan",
+    )
+
+    chat_sessions: Mapped[list["ChatSession"]] = relationship(
+        back_populates="knowledge_base",
+        cascade="all, delete-orphan",
+    )
+
+    # ==========================
+    # Representation
+    # ==========================
+
+    def __repr__(self) -> str:
+        return (
+            f"<KnowledgeBase("
+            f"id={self.id}, "
+            f"name='{self.name}'"
+            f")>"
+        )
+
+
+================================================================================
+./backend/app/models/user.py
+================================================================================
+
+import uuid
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from sqlalchemy import DateTime, String, func
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.chat_session import ChatSession
+    from app.models.knowledge_base import KnowledgeBase
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    # ==========================
+    # Primary Key
+    # ==========================
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    # ==========================
+    # User Information
+    # ==========================
+
+    email: Mapped[str] = mapped_column(
+        String(255),
+        unique=True,
+        index=True,
+        nullable=False,
+    )
+
+    password_hash: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    role: Mapped[str] = mapped_column(
+        String(50),
+        default="user",
+        nullable=False,
+    )
+
+    # ==========================
+    # Timestamps
+    # ==========================
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    # ==========================
+    # Relationships
+    # ==========================
+
+    knowledge_bases: Mapped[list["KnowledgeBase"]] = relationship(
+        back_populates="owner",
+        cascade="all, delete-orphan",
+    )
+
+    chat_sessions: Mapped[list["ChatSession"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    # ==========================
+    # Representation
+    # ==========================
+
+    def __repr__(self) -> str:
+        return (
+            f"<User("
+            f"id={self.id}, "
+            f"email='{self.email}', "
+            f"role='{self.role}'"
+            f")>"
+        )
+
+
+================================================================================
+./backend/app/models/chat_session.py
+================================================================================
+
+import uuid
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.user import User
+    from app.models.knowledge_base import KnowledgeBase
+    from app.models.message import Message
+
+
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
+
+    # ==========================
+    # Primary Key
+    # ==========================
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    # ==========================
+    # Foreign Keys
+    # ==========================
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    knowledge_base_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("knowledge_bases.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # ==========================
+    # Chat Info
+    # ==========================
+
+    title: Mapped[str] = mapped_column(
+        String(255),
+        default="New Chat",
+        nullable=False,
+    )
+
+    # ==========================
+    # Timestamp
+    # ==========================
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    # ==========================
+    # Relationships
+    # ==========================
+
+    user: Mapped["User"] = relationship(
+        back_populates="chat_sessions",
+    )
+
+    knowledge_base: Mapped["KnowledgeBase"] = relationship(
+        back_populates="chat_sessions",
+    )
+
+    messages: Mapped[list["Message"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
+
+    # ==========================
+    # Representation
+    # ==========================
+
+    def __repr__(self) -> str:
+        return (
+            f"<ChatSession("
+            f"id={self.id}, "
+            f"title='{self.title}'"
+            f")>"
+        )
 
 
 ================================================================================
@@ -1752,6 +2729,9 @@ from pydantic import BaseModel
 
 
 class ChatRequest(BaseModel):
+
+    session_id: str
+
     question: str
 
 
@@ -1768,6 +2748,27 @@ class QuestionRequest(BaseModel):
 
 ================================================================================
 ./backend/app/services/__init__.py
+================================================================================
+
+
+
+
+================================================================================
+./backend/app/services/sql/validator.py
+================================================================================
+
+
+
+
+================================================================================
+./backend/app/services/sql/formatter.py
+================================================================================
+
+
+
+
+================================================================================
+./backend/app/services/sql/generator.py
 ================================================================================
 
 
@@ -1791,8 +2792,7 @@ from app.core.config import settings
 
 class OpenRouterProvider:
 
-    MODEL = "google/gemma-3-4b-it:free"
-
+    MODEL = "google/gemma-3-4b-it"
     async def generate(self, prompt: str):
 
         headers = {
@@ -1820,29 +2820,62 @@ class OpenRouterProvider:
         data = response.json()
 
         return data["choices"][0]["message"]["content"]
+    
+    async def generate_messages(self, messages):
+
+        headers = {
+            "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
+            "Content-Type": "application/json",
+        }
+
+        payload = {
+            "model": self.MODEL,
+            "messages": messages,
+        }
+
+        async with httpx.AsyncClient(timeout=60) as client:
+
+            response = await client.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json=payload,
+            )
+
+        print("\nSTATUS:", response.status_code)
+        print(response.text)
+
+        response.raise_for_status()
+
+        data = response.json()
+
+        return data["choices"][0]["message"]["content"]
 
 
 ================================================================================
 ./backend/app/services/llm/prompt_builder.py
 ================================================================================
 
-def build_prompt(question: str, contexts: list):
+def build_prompt(question, contexts):
 
-    context_text = "\n\n".join(contexts)
+    context = "\n\n".join(contexts)
 
-    prompt = f"""
-Answer the question only using the provided context.
+    return f"""
+You are a helpful assistant.
+
+Answer ONLY from the provided context.
+
+If the answer is not contained in the context, say:
+
+"I don't have enough information to answer that."
 
 Context:
-{context_text}
+{context}
 
 Question:
 {question}
 
 Answer:
 """
-
-    return prompt
 
 
 ================================================================================
@@ -1891,6 +2924,161 @@ async def ask(question: str):
 
 
 ================================================================================
+./backend/app/services/conversation/__init__.py
+================================================================================
+
+
+
+
+================================================================================
+./backend/app/services/conversation/conversation_service.py
+================================================================================
+
+from collections import defaultdict
+from typing import List, Dict
+
+
+class ConversationService:
+
+    def __init__(self):
+        self.sessions = defaultdict(list)
+
+    def add_message(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+    ):
+
+        self.sessions[session_id].append(
+            {
+                "role": role,
+                "content": content,
+            }
+        )
+
+    def history(
+        self,
+        session_id: str,
+        limit: int = 10,
+    ) -> List[Dict]:
+
+        return self.sessions[session_id][-limit:]
+
+
+conversation_service = ConversationService()
+
+
+================================================================================
+./backend/app/services/router/__init__.py
+================================================================================
+
+
+
+
+================================================================================
+./backend/app/services/router/intent_router.py
+================================================================================
+
+from enum import Enum
+
+from app.services.llm.openrouter_provider import OpenRouterProvider
+
+
+class Intent(str, Enum):
+    CHAT = "CHAT"
+    DOCUMENT = "DOCUMENT"
+    DATABASE = "DATABASE"
+
+
+provider = OpenRouterProvider()
+
+
+SYSTEM_PROMPT = """
+You are an intent classifier.
+
+Your job is ONLY to classify the user's request.
+
+Return ONLY one word.
+
+CHAT
+DOCUMENT
+DATABASE
+
+Definitions:
+
+CHAT
+General conversation.
+No document lookup.
+No SQL needed.
+
+DOCUMENT
+The answer should come from uploaded documents,
+knowledge bases,
+PDFs,
+Excel,
+Word,
+CSV,
+etc.
+
+DATABASE
+The user is asking about structured data.
+
+Examples:
+
+How many students attended yesterday?
+DATABASE
+
+List all pending invoices.
+DATABASE
+
+What is Artificial Intelligence?
+CHAT
+
+Explain Newton's Second Law from the uploaded notes.
+DOCUMENT
+
+Who are you?
+CHAT
+
+Return ONLY:
+
+CHAT
+
+or
+
+DOCUMENT
+
+or
+
+DATABASE
+"""
+
+
+async def classify(question: str) -> Intent:
+
+    prompt = f"""
+{SYSTEM_PROMPT}
+
+Question:
+
+{question}
+"""
+
+    response = await provider.generate(prompt)
+
+    response = response.strip().upper()
+
+    if response == "DATABASE":
+        return Intent.DATABASE
+
+    if response == "DOCUMENT":
+        return Intent.DOCUMENT
+
+    return Intent.CHAT
+
+
+================================================================================
 ./backend/app/services/retrieval/__init__.py
 ================================================================================
 
@@ -1898,25 +3086,13 @@ async def ask(question: str):
 
 
 ================================================================================
-./backend/app/services/retrieval/qdrant_service.py
-================================================================================
-
-from qdrant_client import QdrantClient
-
-client = QdrantClient(
-    host="localhost",
-    port=6333
-)
-
-print(client.get_collections())
-
-
-================================================================================
 ./backend/app/services/retrieval/search.py
 ================================================================================
 
 from app.services.embeddings.bge_embedding import get_embedding
-from app.services.retrieval.qdrant_service import client
+from app.services.retrieval.client import get_qdrant_client
+
+client = get_qdrant_client()
 
 COLLECTION_NAME = "knowledge_chunks"
 
@@ -1932,6 +3108,25 @@ def search(query: str, limit: int = 5):
     )
 
     return response.points
+
+
+================================================================================
+./backend/app/services/retrieval/client.py
+================================================================================
+
+from functools import lru_cache
+
+from qdrant_client import QdrantClient
+
+from app.core.config import settings
+
+
+@lru_cache
+def get_qdrant_client() -> QdrantClient:
+    return QdrantClient(
+        host=settings.QDRANT_HOST,
+        port=settings.QDRANT_PORT,
+    )
 
 
 ================================================================================
@@ -1953,7 +3148,9 @@ for hit in results:
 ================================================================================
 
 from qdrant_client.models import Distance, VectorParams
-from app.services.retrieval.qdrant_service import client
+from app.services.retrieval.client import get_qdrant_client
+
+client = get_qdrant_client()
 
 client.recreate_collection(
     collection_name="knowledge_chunks",
@@ -1964,6 +3161,41 @@ client.recreate_collection(
 )
 
 print("Collection created.")
+
+
+================================================================================
+./backend/app/services/database/connector.py
+================================================================================
+
+
+
+
+================================================================================
+./backend/app/services/database/executor.py
+================================================================================
+
+
+
+
+================================================================================
+./backend/app/services/database/schema_cache.py
+================================================================================
+
+
+
+
+================================================================================
+./backend/app/services/database/inspector.py
+================================================================================
+
+
+
+
+================================================================================
+./backend/app/services/database/registry.py
+================================================================================
+
+
 
 
 ================================================================================
@@ -2015,6 +3247,29 @@ def get_embedding(text: str):
 
 
 ================================================================================
+./backend/app/services/chat/chat_service.py
+================================================================================
+
+from app.services.llm.openrouter_provider import OpenRouterProvider
+
+provider = OpenRouterProvider()
+
+
+async def ask(question: str, history: list):
+
+    messages = history.copy()
+
+    messages.append(
+        {
+            "role": "user",
+            "content": question,
+        }
+    )
+
+    return await provider.generate_messages(messages)
+
+
+================================================================================
 ./backend/app/services/ingestion/__init__.py
 ================================================================================
 
@@ -2044,7 +3299,9 @@ from qdrant_client.models import PointStruct
 from app.services.ingestion.excel_parser import load_excel
 from app.services.ingestion.document_builder import row_to_document
 from app.services.embeddings.bge_embedding import get_embedding
-from app.services.retrieval.qdrant_service import client
+from app.services.retrieval.client import get_qdrant_client
+
+client = get_qdrant_client()
 
 
 COLLECTION_NAME = "knowledge_chunks"
@@ -2114,19 +3371,66 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
 
+    ########################################
+    # Application
+    ########################################
+
+    APP_NAME: str = "KnowledgeBase AI"
+    APP_VERSION: str = "2.0"
+
+    DEBUG: bool = True
+
+    ########################################
+    # PostgreSQL
+    ########################################
+
     POSTGRES_HOST: str
     POSTGRES_PORT: int
     POSTGRES_DB: str
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
 
+    ########################################
+    # Qdrant
+    ########################################
+
     QDRANT_HOST: str
     QDRANT_PORT: int
 
+    ########################################
+    # Redis
+    ########################################
+
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+
+    ########################################
+    # OpenRouter
+    ########################################
+
     OPENROUTER_API_KEY: str
 
+    ########################################
+    # Uploads
+    ########################################
+
+    UPLOAD_DIRECTORY: str = "uploads"
+
+    ########################################
+    # JWT (Future)
+    ########################################
+
+    JWT_SECRET: str = "change_me"
+
+    JWT_ALGORITHM: str = "HS256"
+
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+
+    ########################################
+
     model_config = SettingsConfigDict(
-        env_file=".env"
+        env_file=".env",
+        extra="ignore",
     )
 
 
