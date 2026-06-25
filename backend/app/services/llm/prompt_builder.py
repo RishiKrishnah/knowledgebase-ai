@@ -1,21 +1,51 @@
-def build_prompt(question, contexts):
+from pathlib import Path
 
-    context = "\n\n".join(contexts)
+PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
 
-    return f"""
-You are a helpful assistant.
 
-Answer ONLY from the provided context.
+def load_prompt(name: str) -> str:
+    path = PROMPTS_DIR / f"{name}.txt"
+    return path.read_text(encoding="utf-8")
 
-If the answer is not contained in the context, say:
 
-"I don't have enough information to answer that."
+def build_chat_prompt(question: str) -> str:
+    template = load_prompt("chat")
+    return template.format(question=question)
 
-Context:
-{context}
 
-Question:
-{question}
+def build_rag_prompt(
+    question: str,
+    contexts: list[str],
+) -> str:
+    template = load_prompt("rag")
 
-Answer:
-"""
+    return template.format(
+        question=question,
+        context="\n\n".join(contexts),
+    )
+
+
+def build_sql_prompt(
+    question: str,
+    schema: str,
+) -> str:
+    template = load_prompt("sql_generator")
+
+    return template.format(
+        question=question,
+        schema=schema,
+    )
+
+
+def build_sql_response_prompt(
+    question: str,
+    sql: str,
+    rows: list[dict],
+) -> str:
+    template = load_prompt("sql_response")
+
+    return template.format(
+        question=question,
+        sql=sql,
+        rows=rows,
+    )

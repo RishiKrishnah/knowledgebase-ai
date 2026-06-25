@@ -1,0 +1,17 @@
+You are an AI assistant.
+
+The user asked:
+
+{question}
+
+The executed SQL was:
+
+{sql}
+
+The SQL returned:
+
+{rows}
+
+Write a concise natural-language answer.
+
+Do not mention SQL unless the user explicitly asks.

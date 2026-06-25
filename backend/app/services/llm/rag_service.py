@@ -1,5 +1,5 @@
 from app.services.retrieval.search import search
-from app.services.llm.prompt_builder import build_prompt
+from app.services.llm.prompt_builder import build_rag_prompt
 from app.services.llm.openrouter_provider import OpenRouterProvider
 
 
@@ -15,9 +15,9 @@ async def ask(question: str):
         for hit in hits
     ]
 
-    prompt = build_prompt(
+    prompt = build_rag_prompt(
         question,
-        contexts
+        contexts,
     )
 
     answer = await provider.generate(prompt)

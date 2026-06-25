@@ -3,15 +3,16 @@ from app.services.retrieval.client import get_qdrant_client
 
 client = get_qdrant_client()
 
-COLLECTION_NAME = "knowledge_chunks"
 
-
-def search(query: str, limit: int = 5):
-
+def search(
+    query: str,
+    collection_name: str = "knowledge_chunks",
+    limit: int = 5,
+):
     query_vector = get_embedding(query)
 
     response = client.query_points(
-        collection_name=COLLECTION_NAME,
+        collection_name=collection_name,
         query=query_vector,
         limit=limit,
     )

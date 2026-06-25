@@ -1,4 +1,7 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from app.db.session import get_db
 
 from app.schemas.chat_schema import ChatRequest
 
@@ -8,6 +11,14 @@ from app.services.router.intent_router import Intent
 from app.services.chat.chat_service import ask as chat_answer
 from app.services.llm.rag_service import ask as rag_answer
 
+from app.services.database.database_agent import (
+    database_agent,
+)
+
+from app.services.sql.response_generator import (
+    sql_response_generator,
+)
+
 from app.services.conversation.conversation_service import (
     conversation_service,
 )
@@ -16,7 +27,10 @@ router = APIRouter()
 
 
 @router.post("/chat")
-async def chat(request: ChatRequest):
+async def chat(
+    request: ChatRequest,
+    db: Session = Depends(get_db),
+):
 
     history = conversation_service.history(
         request.session_id
@@ -39,7 +53,16 @@ async def chat(request: ChatRequest):
 
     else:
 
-        answer = "Database module coming soon."
+        result = await database_agent.answer(
+            db=db,
+            question=request.question,
+        )
+
+        answer = await sql_response_generator.generate(
+            question=request.question,
+            sql=result["sql"],
+            rows=result["rows"],
+        )
 
     conversation_service.add_message(
         request.session_id,

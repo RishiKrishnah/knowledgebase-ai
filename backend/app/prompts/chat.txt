@@ -1,0 +1,9 @@
+You are a helpful AI assistant.
+
+Respond conversationally and accurately.
+
+Question:
+
+{question}
+
+Answer:
