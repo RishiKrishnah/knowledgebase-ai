@@ -12,16 +12,21 @@
         alembic/
             env.py
             versions/
+                fe81ee6e0bdc_add_database_connections.py
                 64b9be734fe6_initial_schema.py
         app/
             __init__.py
             main.py
+            repositories/
+                __init__.py
+                database_connection_repository.py
             api/
                 __init__.py
                 routes/
                     __init__.py
                     search.py
                     chat.py
+                    connections.py
             db/
                 database.py
                 __init__.py
@@ -34,10 +39,17 @@
                 message.py
                 chunk.py
                 knowledge_base.py
+                database_connection.py
                 user.py
                 chat_session.py
+            prompts/
+                sql_generator.txt
+                chat.txt
+                rag.txt
+                sql_response.txt
             schemas/
                 __init__.py
+                database_connection.py
                 chat_schema.py
                 question_schema.py
             services/
@@ -45,7 +57,10 @@
                 sql/
                     validator.py
                     formatter.py
+                    test_generator.py
+                    response_generator.py
                     generator.py
+                    test_validator.py
                 llm/
                     __init__.py
                     openrouter_provider.py
@@ -65,10 +80,20 @@
                     test_search.py
                     create_collection.py
                 database/
+                    test_inspector.py
                     connector.py
+                    ingest_schema.py
                     executor.py
+                    test_schema_retriever.py
+                    schema_retriever.py
+                    test_schema_builder.py
+                    test_connector.py
                     schema_cache.py
+                    test_database_agent.py
+                    create_schema_collection.py
+                    database_agent.py
                     inspector.py
+                    schema_builder.py
                     registry.py
                 embeddings/
                     __init__.py
@@ -708,16 +733,21 @@ print(f"Generated {OUTPUT_FILE}")
         alembic/
             env.py
             versions/
+                fe81ee6e0bdc_add_database_connections.py
                 64b9be734fe6_initial_schema.py
         app/
             __init__.py
             main.py
+            repositories/
+                __init__.py
+                database_connection_repository.py
             api/
                 __init__.py
                 routes/
                     __init__.py
                     search.py
                     chat.py
+                    connections.py
             db/
                 database.py
                 __init__.py
@@ -730,10 +760,17 @@ print(f"Generated {OUTPUT_FILE}")
                 message.py
                 chunk.py
                 knowledge_base.py
+                database_connection.py
                 user.py
                 chat_session.py
+            prompts/
+                sql_generator.txt
+                chat.txt
+                rag.txt
+                sql_response.txt
             schemas/
                 __init__.py
+                database_connection.py
                 chat_schema.py
                 question_schema.py
             services/
@@ -741,7 +778,10 @@ print(f"Generated {OUTPUT_FILE}")
                 sql/
                     validator.py
                     formatter.py
+                    test_generator.py
+                    response_generator.py
                     generator.py
+                    test_validator.py
                 llm/
                     __init__.py
                     openrouter_provider.py
@@ -761,10 +801,20 @@ print(f"Generated {OUTPUT_FILE}")
                     test_search.py
                     create_collection.py
                 database/
+                    test_inspector.py
                     connector.py
+                    ingest_schema.py
                     executor.py
+                    test_schema_retriever.py
+                    schema_retriever.py
+                    test_schema_builder.py
+                    test_connector.py
                     schema_cache.py
+                    test_database_agent.py
+                    create_schema_collection.py
+                    database_agent.py
                     inspector.py
+                    schema_builder.py
                     registry.py
                 embeddings/
                     __init__.py
@@ -1758,6 +1808,57 @@ else:
 
 
 ================================================================================
+./backend/alembic/versions/fe81ee6e0bdc_add_database_connections.py
+================================================================================
+
+"""add database connections
+
+Revision ID: fe81ee6e0bdc
+Revises: 64b9be734fe6
+Create Date: 2026-06-25 22:31:40.298436
+
+"""
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+
+
+# revision identifiers, used by Alembic.
+revision: str = 'fe81ee6e0bdc'
+down_revision: Union[str, Sequence[str], None] = '64b9be734fe6'
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    """Upgrade schema."""
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.create_table('database_connections',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('name', sa.String(length=100), nullable=False),
+    sa.Column('db_type', sa.String(length=30), nullable=False),
+    sa.Column('host', sa.String(length=255), nullable=False),
+    sa.Column('port', sa.Integer(), nullable=False),
+    sa.Column('database_name', sa.String(length=255), nullable=False),
+    sa.Column('username', sa.String(length=255), nullable=False),
+    sa.Column('password', sa.String(length=255), nullable=False),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.PrimaryKeyConstraint('id')
+    )
+    # ### end Alembic commands ###
+
+
+def downgrade() -> None:
+    """Downgrade schema."""
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_table('database_connections')
+    # ### end Alembic commands ###
+
+
+
+================================================================================
 ./backend/alembic/versions/64b9be734fe6_initial_schema.py
 ================================================================================
 
@@ -1881,6 +1982,9 @@ from fastapi import FastAPI
 from app.api.routes.search import router as search_router
 from app.api.routes.chat import router as chat_router
 from app.services.embeddings.model_loader import get_model
+from app.api.routes.connections import (
+    router as connection_router,
+)
 
 app = FastAPI(
     title="KnowledgeBase AI",
@@ -1889,6 +1993,7 @@ app = FastAPI(
 
 app.include_router(chat_router)
 app.include_router(search_router)
+app.include_router(connection_router)
 
 @app.on_event("startup")
 async def startup():
@@ -1904,6 +2009,88 @@ def root():
     return {
         "status": "running"
     }
+
+
+================================================================================
+./backend/app/repositories/__init__.py
+================================================================================
+
+from app.repositories.database_connection_repository import (
+    DatabaseConnectionRepository,
+)
+
+__all__ = [
+    "DatabaseConnectionRepository",
+]
+
+
+================================================================================
+./backend/app/repositories/database_connection_repository.py
+================================================================================
+
+from uuid import UUID
+
+from sqlalchemy.orm import Session
+
+from app.models.database_connection import DatabaseConnection
+
+
+class DatabaseConnectionRepository:
+
+    def create(
+        self,
+        db: Session,
+        connection: DatabaseConnection,
+    ) -> DatabaseConnection:
+
+        db.add(connection)
+        db.commit()
+        db.refresh(connection)
+
+        return connection
+
+    def get(
+        self,
+        db: Session,
+        connection_id: UUID,
+    ) -> DatabaseConnection | None:
+
+        return (
+            db.query(DatabaseConnection)
+            .filter(DatabaseConnection.id == connection_id)
+            .first()
+        )
+
+    def list(
+        self,
+        db: Session,
+    ) -> list[DatabaseConnection]:
+
+        return (
+            db.query(DatabaseConnection)
+            .order_by(DatabaseConnection.created_at.desc())
+            .all()
+        )
+
+    def update(
+        self,
+        db: Session,
+        connection: DatabaseConnection,
+    ) -> DatabaseConnection:
+
+        db.commit()
+        db.refresh(connection)
+
+        return connection
+
+    def delete(
+        self,
+        db: Session,
+        connection: DatabaseConnection,
+    ):
+
+        db.delete(connection)
+        db.commit()
 
 
 ================================================================================
@@ -1952,7 +2139,10 @@ def semantic_search(request: QuestionRequest):
 ./backend/app/api/routes/chat.py
 ================================================================================
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from app.db.session import get_db
 
 from app.schemas.chat_schema import ChatRequest
 
@@ -1962,6 +2152,14 @@ from app.services.router.intent_router import Intent
 from app.services.chat.chat_service import ask as chat_answer
 from app.services.llm.rag_service import ask as rag_answer
 
+from app.services.database.database_agent import (
+    database_agent,
+)
+
+from app.services.sql.response_generator import (
+    sql_response_generator,
+)
+
 from app.services.conversation.conversation_service import (
     conversation_service,
 )
@@ -1970,7 +2168,10 @@ router = APIRouter()
 
 
 @router.post("/chat")
-async def chat(request: ChatRequest):
+async def chat(
+    request: ChatRequest,
+    db: Session = Depends(get_db),
+):
 
     history = conversation_service.history(
         request.session_id
@@ -1993,7 +2194,16 @@ async def chat(request: ChatRequest):
 
     else:
 
-        answer = "Database module coming soon."
+        result = await database_agent.answer(
+            db=db,
+            question=request.question,
+        )
+
+        answer = await sql_response_generator.generate(
+            question=request.question,
+            sql=result["sql"],
+            rows=result["rows"],
+        )
 
     conversation_service.add_message(
         request.session_id,
@@ -2011,6 +2221,53 @@ async def chat(request: ChatRequest):
         "intent": intent.value,
         "answer": answer,
     }
+
+
+================================================================================
+./backend/app/api/routes/connections.py
+================================================================================
+
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from app.db.session import get_db
+
+from app.schemas.database_connection import (
+    DatabaseConnectionCreate,
+    DatabaseConnectionResponse,
+)
+
+from app.services.database.registry import (
+    database_registry,
+)
+
+router = APIRouter(
+    prefix="/connections",
+    tags=["Connections"],
+)
+
+
+@router.post(
+    "",
+    response_model=DatabaseConnectionResponse,
+)
+def create_connection(
+    request: DatabaseConnectionCreate,
+    db: Session = Depends(get_db),
+):
+
+    connection = database_registry.create_connection(
+        db=db,
+        name=request.name,
+        db_type=request.db_type,
+        host=request.host,
+        port=request.port,
+        database_name=request.database_name,
+        username=request.username,
+        password=request.password,
+    )
+
+    return connection
 
 
 ================================================================================
@@ -2111,7 +2368,7 @@ from app.models.document import Document
 from app.models.chunk import Chunk
 from app.models.chat_session import ChatSession
 from app.models.message import Message
-from .database_connection import DatabaseConnection
+from app.models.database_connection import DatabaseConnection
 
 __all__ = [
     "User",
@@ -2120,6 +2377,7 @@ __all__ = [
     "Chunk",
     "ChatSession",
     "Message",
+    "DatabaseConnection",
 ]
 
 
@@ -2524,6 +2782,106 @@ class KnowledgeBase(Base):
 
 
 ================================================================================
+./backend/app/models/database_connection.py
+================================================================================
+
+import uuid
+from datetime import datetime
+
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Integer,
+    String,
+    func,
+)
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db.base import Base
+
+
+class DatabaseConnection(Base):
+    __tablename__ = "database_connections"
+
+    # ==========================
+    # Primary Key
+    # ==========================
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    # ==========================
+    # Connection Information
+    # ==========================
+
+    name: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+    )
+
+    db_type: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="postgresql",
+    )
+
+    host: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    port: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    database_name: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    username: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    password: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+    )
+
+    # ==========================
+    # Timestamp
+    # ==========================
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    def __repr__(self):
+
+        return (
+            f"<DatabaseConnection("
+            f"name='{self.name}', "
+            f"type='{self.db_type}', "
+            f"database='{self.database_name}'"
+            f")>"
+        )
+
+
+================================================================================
 ./backend/app/models/user.py
 ================================================================================
 
@@ -2715,10 +3073,142 @@ class ChatSession(Base):
 
 
 ================================================================================
+./backend/app/prompts/sql_generator.txt
+================================================================================
+
+You are an expert PostgreSQL SQL generator.
+
+Your task is to generate a PostgreSQL SELECT query.
+
+Rules:
+
+1. Return ONLY SQL.
+2. Never explain the query.
+3. Never use markdown.
+4. Never wrap SQL in ``` blocks.
+5. Never generate INSERT.
+6. Never generate UPDATE.
+7. Never generate DELETE.
+8. Never generate DROP.
+9. Never generate ALTER.
+10. Never generate CREATE.
+11. Only use tables and columns provided in the schema.
+12. If the question cannot be answered from the schema, return:
+13. Always qualify joins using the foreign-key relationships provided.
+
+SELECT 'INSUFFICIENT_SCHEMA';
+
+Schema:
+
+{schema}
+
+Question:
+
+{question}
+
+
+================================================================================
+./backend/app/prompts/chat.txt
+================================================================================
+
+You are a helpful AI assistant.
+
+Respond conversationally and accurately.
+
+Question:
+
+{question}
+
+Answer:
+
+
+================================================================================
+./backend/app/prompts/rag.txt
+================================================================================
+
+You are an AI assistant.
+
+Answer the user's question ONLY using the provided context.
+
+If the context does not contain enough information, reply:
+
+"I don't have enough information to answer that."
+
+Context:
+
+{context}
+
+Question:
+
+{question}
+
+Answer:
+
+
+================================================================================
+./backend/app/prompts/sql_response.txt
+================================================================================
+
+You are an AI assistant.
+
+The user asked:
+
+{question}
+
+The executed SQL was:
+
+{sql}
+
+The SQL returned:
+
+{rows}
+
+Write a concise natural-language answer.
+
+Do not mention SQL unless the user explicitly asks.
+
+
+================================================================================
 ./backend/app/schemas/__init__.py
 ================================================================================
 
 
+
+
+================================================================================
+./backend/app/schemas/database_connection.py
+================================================================================
+
+from pydantic import BaseModel, ConfigDict
+
+from uuid import UUID
+
+class DatabaseConnectionCreate(BaseModel):
+    name: str
+    db_type: str
+    host: str
+    port: int
+    database_name: str
+    username: str
+    password: str
+
+
+
+
+class DatabaseConnectionResponse(BaseModel):
+
+    model_config = ConfigDict(
+        from_attributes=True
+    )
+
+    id: UUID
+    name: str
+    db_type: str
+    host: str
+    port: int
+    database_name: str
+    username: str
+    is_active: bool
 
 
 ================================================================================
@@ -2757,7 +3247,68 @@ class QuestionRequest(BaseModel):
 ./backend/app/services/sql/validator.py
 ================================================================================
 
+from sqlglot import parse_one
+from sqlglot.errors import ParseError
+from sqlglot.expressions import Select, With
 
+
+class SQLValidationError(Exception):
+    pass
+
+
+class SQLValidator:
+
+    FORBIDDEN_KEYWORDS = {
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "DROP",
+        "ALTER",
+        "CREATE",
+        "TRUNCATE",
+        "MERGE",
+        "GRANT",
+        "REVOKE",
+    }
+
+    def validate(self, sql: str) -> str:
+
+        sql = sql.strip().rstrip(";")
+
+        upper_sql = sql.upper()
+
+        for keyword in self.FORBIDDEN_KEYWORDS:
+
+            if keyword in upper_sql:
+                raise SQLValidationError(
+                    f"Forbidden SQL statement: {keyword}"
+                )
+
+        if ";" in sql:
+            raise SQLValidationError(
+                "Multiple SQL statements are not allowed."
+            )
+
+        try:
+            expression = parse_one(
+                sql,
+                read="postgres",
+            )
+
+        except ParseError as e:
+            raise SQLValidationError(
+                str(e)
+            )
+
+        if not isinstance(expression, (Select, With)):
+            raise SQLValidationError(
+                "Only SELECT queries are allowed."
+            )
+
+        return sql
+
+
+sql_validator = SQLValidator()
 
 
 ================================================================================
@@ -2768,10 +3319,145 @@ class QuestionRequest(BaseModel):
 
 
 ================================================================================
+./backend/app/services/sql/test_generator.py
+================================================================================
+
+import asyncio
+
+from app.services.sql.generator import sql_generator
+
+schema = """
+Table: users
+
+Columns:
+- id (UUID)
+- email (VARCHAR)
+- role (VARCHAR)
+"""
+
+question = "How many users are there?"
+
+async def main():
+
+    sql = await sql_generator.generate(
+        question=question,
+        schema=schema,
+    )
+
+    print(sql)
+
+asyncio.run(main())
+
+
+================================================================================
+./backend/app/services/sql/response_generator.py
+================================================================================
+
+from app.services.llm.openrouter_provider import OpenRouterProvider
+from app.services.llm.prompt_builder import (
+    build_sql_response_prompt,
+)
+
+provider = OpenRouterProvider()
+
+
+class SQLResponseGenerator:
+
+    async def generate(
+        self,
+        question: str,
+        sql: str,
+        rows: list[dict],
+    ) -> str:
+
+        prompt = build_sql_response_prompt(
+            question=question,
+            sql=sql,
+            rows=rows,
+        )
+
+        return await provider.generate(prompt)
+
+
+sql_response_generator = SQLResponseGenerator()
+
+
+================================================================================
 ./backend/app/services/sql/generator.py
 ================================================================================
 
+from app.services.llm.openrouter_provider import OpenRouterProvider
+from app.services.llm.prompt_builder import build_sql_prompt
 
+provider = OpenRouterProvider()
+
+class SQLGenerator:
+
+    async def generate(
+        self,
+        question: str,
+        schema: str,
+    ) -> str:
+
+        prompt = build_sql_prompt(
+            question=question,
+            schema=schema,
+        )
+
+        sql = await provider.generate(prompt)
+
+        return sql.strip()
+
+
+sql_generator = SQLGenerator()
+
+
+================================================================================
+./backend/app/services/sql/test_validator.py
+================================================================================
+
+from app.services.sql.validator import (
+    sql_validator,
+    SQLValidationError,
+)
+
+queries = [
+
+    "SELECT * FROM users",
+
+    """
+    WITH x AS (
+        SELECT * FROM users
+    )
+    SELECT * FROM x
+    """,
+
+    "DROP TABLE users",
+
+    "DELETE FROM users",
+
+    "UPDATE users SET role='admin'",
+
+    "SELECT * FROM users; DELETE FROM users;",
+]
+
+for query in queries:
+
+    print("=" * 60)
+
+    print(query)
+
+    try:
+
+        sql_validator.validate(query)
+
+        print("VALID")
+
+    except SQLValidationError as e:
+
+        print("INVALID")
+
+        print(e)
 
 
 ================================================================================
@@ -2855,27 +3541,57 @@ class OpenRouterProvider:
 ./backend/app/services/llm/prompt_builder.py
 ================================================================================
 
-def build_prompt(question, contexts):
+from pathlib import Path
 
-    context = "\n\n".join(contexts)
+PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
 
-    return f"""
-You are a helpful assistant.
 
-Answer ONLY from the provided context.
+def load_prompt(name: str) -> str:
+    path = PROMPTS_DIR / f"{name}.txt"
+    return path.read_text(encoding="utf-8")
 
-If the answer is not contained in the context, say:
 
-"I don't have enough information to answer that."
+def build_chat_prompt(question: str) -> str:
+    template = load_prompt("chat")
+    return template.format(question=question)
 
-Context:
-{context}
 
-Question:
-{question}
+def build_rag_prompt(
+    question: str,
+    contexts: list[str],
+) -> str:
+    template = load_prompt("rag")
 
-Answer:
-"""
+    return template.format(
+        question=question,
+        context="\n\n".join(contexts),
+    )
+
+
+def build_sql_prompt(
+    question: str,
+    schema: str,
+) -> str:
+    template = load_prompt("sql_generator")
+
+    return template.format(
+        question=question,
+        schema=schema,
+    )
+
+
+def build_sql_response_prompt(
+    question: str,
+    sql: str,
+    rows: list[dict],
+) -> str:
+    template = load_prompt("sql_response")
+
+    return template.format(
+        question=question,
+        sql=sql,
+        rows=rows,
+    )
 
 
 ================================================================================
@@ -2897,7 +3613,7 @@ class LLMProvider(ABC):
 ================================================================================
 
 from app.services.retrieval.search import search
-from app.services.llm.prompt_builder import build_prompt
+from app.services.llm.prompt_builder import build_rag_prompt
 from app.services.llm.openrouter_provider import OpenRouterProvider
 
 
@@ -2913,9 +3629,9 @@ async def ask(question: str):
         for hit in hits
     ]
 
-    prompt = build_prompt(
+    prompt = build_rag_prompt(
         question,
-        contexts
+        contexts,
     )
 
     answer = await provider.generate(prompt)
@@ -3094,15 +3810,16 @@ from app.services.retrieval.client import get_qdrant_client
 
 client = get_qdrant_client()
 
-COLLECTION_NAME = "knowledge_chunks"
 
-
-def search(query: str, limit: int = 5):
-
+def search(
+    query: str,
+    collection_name: str = "knowledge_chunks",
+    limit: int = 5,
+):
     query_vector = get_embedding(query)
 
     response = client.query_points(
-        collection_name=COLLECTION_NAME,
+        collection_name=collection_name,
         query=query_vector,
         limit=limit,
     )
@@ -3164,17 +3881,267 @@ print("Collection created.")
 
 
 ================================================================================
+./backend/app/services/database/test_inspector.py
+================================================================================
+
+from pprint import pprint
+
+from app.db.session import SessionLocal
+
+from app.services.database.registry import database_registry
+from app.services.database.connector import database_connector
+from app.services.database.inspector import database_inspector
+
+db = SessionLocal()
+
+connection = database_registry.list_connections(db)[0]
+
+engine = database_connector.connect(connection)
+
+schema = database_inspector.inspect(engine)
+
+pprint(schema)
+
+
+================================================================================
 ./backend/app/services/database/connector.py
 ================================================================================
 
+from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
 
+from app.models.database_connection import DatabaseConnection
+
+
+class DatabaseConnector:
+
+    def connect(
+        self,
+        connection: DatabaseConnection,
+    ) -> Engine:
+
+        if connection.db_type == "postgresql":
+
+            url = (
+                f"postgresql://"
+                f"{connection.username}:"
+                f"{connection.password}"
+                f"@{connection.host}:"
+                f"{connection.port}/"
+                f"{connection.database_name}"
+            )
+
+        else:
+            raise ValueError(
+                f"Unsupported database type: {connection.db_type}"
+            )
+
+        engine = create_engine(
+            url,
+            pool_pre_ping=True,
+            future=True,
+        )
+
+        return engine
+
+
+database_connector = DatabaseConnector()
+
+
+================================================================================
+./backend/app/services/database/ingest_schema.py
+================================================================================
+
+from uuid import uuid4
+
+from qdrant_client.models import PointStruct
+
+from app.db.session import SessionLocal
+from app.services.database.registry import database_registry
+from app.services.database.connector import database_connector
+from app.services.database.inspector import database_inspector
+from app.services.database.schema_builder import schema_builder
+
+from app.services.embeddings.bge_embedding import get_embedding
+from app.services.retrieval.client import get_qdrant_client
+
+COLLECTION_NAME = "database_schema"
+
+client = get_qdrant_client()
+
+
+def ingest_schema():
+
+    db = SessionLocal()
+
+    try:
+
+        connection = database_registry.list_connections(db)[0]
+
+        engine = database_connector.connect(connection)
+
+        schema = database_inspector.inspect(engine)
+
+        documents = schema_builder.build_documents(schema)
+
+        points = []
+
+        for document in documents:
+
+            embedding = get_embedding(document["text"])
+
+            points.append(
+                PointStruct(
+                    id=str(uuid4()),
+                    vector=embedding,
+                    payload={
+                        "table": document["table"],
+                        "text": document["text"],
+                    },
+                )
+            )
+
+        client.upsert(
+            collection_name=COLLECTION_NAME,
+            points=points,
+        )
+
+        print(
+            f"Ingested {len(points)} schema documents."
+        )
+
+    finally:
+
+        db.close()
+
+
+if __name__ == "__main__":
+    ingest_schema()
 
 
 ================================================================================
 ./backend/app/services/database/executor.py
 ================================================================================
 
+from sqlalchemy import text
+from sqlalchemy.engine import Engine
 
+
+class DatabaseExecutor:
+
+    def execute(
+        self,
+        engine: Engine,
+        sql: str,
+    ) -> list[dict]:
+
+        with engine.connect() as connection:
+
+            result = connection.execute(text(sql))
+
+            if result.returns_rows:
+                return [
+                    dict(row._mapping)
+                    for row in result
+                ]
+
+            return []
+
+
+database_executor = DatabaseExecutor()
+
+
+================================================================================
+./backend/app/services/database/test_schema_retriever.py
+================================================================================
+
+from app.services.database.schema_retriever import retrieve_schema
+
+schema = retrieve_schema(
+    "How many users are registered?"
+)
+
+print(schema)
+
+
+================================================================================
+./backend/app/services/database/schema_retriever.py
+================================================================================
+
+from app.services.retrieval.search import search
+
+
+SCHEMA_COLLECTION = "database_schema"
+
+
+def retrieve_schema(
+    question: str,
+    limit: int = 5,
+) -> str:
+
+    results = search(
+        query=question,
+        collection_name=SCHEMA_COLLECTION,
+        limit=limit,
+    )
+
+    contexts = []
+
+    for hit in results:
+        contexts.append(hit.payload["text"])
+
+    return "\n\n".join(contexts)
+
+
+================================================================================
+./backend/app/services/database/test_schema_builder.py
+================================================================================
+
+from pprint import pprint
+
+from app.db.session import SessionLocal
+
+from app.services.database.registry import database_registry
+from app.services.database.connector import database_connector
+from app.services.database.inspector import database_inspector
+from app.services.database.schema_builder import schema_builder
+
+db = SessionLocal()
+
+connection = database_registry.list_connections(db)[0]
+
+engine = database_connector.connect(connection)
+
+schema = database_inspector.inspect(engine)
+
+documents = schema_builder.build_documents(schema)
+
+pprint(documents)
+
+
+
+================================================================================
+./backend/app/services/database/test_connector.py
+================================================================================
+
+from app.db.session import SessionLocal
+
+from app.services.database.registry import database_registry
+from app.services.database.connector import database_connector
+
+db = SessionLocal()
+
+connections = database_registry.list_connections(db)
+
+if not connections:
+    print("No registered databases.")
+    exit()
+
+connection = connections[0]
+
+engine = database_connector.connect(connection)
+
+print(engine)
 
 
 ================================================================================
@@ -3185,17 +4152,347 @@ print("Collection created.")
 
 
 ================================================================================
+./backend/app/services/database/test_database_agent.py
+================================================================================
+
+import asyncio
+
+from app.db.session import SessionLocal
+
+from app.services.database.database_agent import (
+    database_agent,
+)
+
+db = SessionLocal()
+
+
+async def main():
+
+    result = await database_agent.answer(
+        db=db,
+        question="How many users are registered?",
+    )
+
+    print()
+
+    print("Generated SQL")
+
+    print(result["sql"])
+
+    print()
+
+    print("Rows")
+
+    print(result["rows"])
+
+
+asyncio.run(main())
+
+
+================================================================================
+./backend/app/services/database/create_schema_collection.py
+================================================================================
+
+from qdrant_client.models import Distance, VectorParams
+
+from app.services.retrieval.client import get_qdrant_client
+
+client = get_qdrant_client()
+
+COLLECTION_NAME = "database_schema"
+
+collections = client.get_collections().collections
+
+exists = any(c.name == COLLECTION_NAME for c in collections)
+
+if not exists:
+    client.create_collection(
+        collection_name=COLLECTION_NAME,
+        vectors_config=VectorParams(
+            size=384,
+            distance=Distance.COSINE,
+        ),
+    )
+
+    print("database_schema collection created.")
+
+else:
+    print("database_schema collection already exists.")
+
+
+================================================================================
+./backend/app/services/database/database_agent.py
+================================================================================
+
+from sqlalchemy.orm import Session
+
+from app.services.database.registry import database_registry
+from app.services.database.connector import database_connector
+from app.services.database.schema_retriever import retrieve_schema
+
+from app.services.sql.generator import sql_generator
+from app.services.sql.validator import sql_validator
+
+from app.services.database.executor import database_executor
+
+
+class DatabaseAgent:
+
+    async def answer(
+        self,
+        db: Session,
+        question: str,
+    ):
+
+        #
+        # Step 1
+        #
+
+        schema = retrieve_schema(question)
+
+        #
+        # Step 2
+        #
+
+        sql = await sql_generator.generate(
+            question=question,
+            schema=schema,
+        )
+
+        #
+        # Step 3
+        #
+
+        validated_sql = sql_validator.validate(sql)
+
+        #
+        # Step 4
+        #
+
+        connection = database_registry.list_connections(db)[0]
+
+        engine = database_connector.connect(connection)
+
+        #
+        # Step 5
+        #
+
+        rows = database_executor.execute(
+            engine,
+            validated_sql,
+        )
+
+        return {
+            "sql": validated_sql,
+            "rows": rows,
+        }
+
+
+database_agent = DatabaseAgent()
+
+
+================================================================================
 ./backend/app/services/database/inspector.py
 ================================================================================
 
+from sqlalchemy import inspect
+from sqlalchemy.engine import Engine
 
+
+class DatabaseInspector:
+
+    def inspect(self, engine: Engine):
+
+        inspector = inspect(engine)
+
+        schema = {}
+
+        for table in inspector.get_table_names():
+
+            columns = inspector.get_columns(table)
+
+            primary_keys = inspector.get_pk_constraint(table)
+
+            foreign_keys = inspector.get_foreign_keys(table)
+
+            schema[table] = {
+                "columns": [
+                    {
+                        "name": column["name"],
+                        "type": str(column["type"]),
+                        "nullable": column["nullable"],
+                    }
+                    for column in columns
+                ],
+                "primary_key": primary_keys.get(
+                    "constrained_columns",
+                    [],
+                ),
+                "foreign_keys": foreign_keys,
+            }
+
+        return schema
+
+
+database_inspector = DatabaseInspector()
+
+
+================================================================================
+./backend/app/services/database/schema_builder.py
+================================================================================
+
+from typing import Dict
+
+
+class SchemaBuilder:
+
+    def build_documents(
+        self,
+        schema: Dict,
+    ) -> list[dict]:
+
+        documents = []
+
+        for table_name, table in schema.items():
+
+            text = f"Table: {table_name}\n\n"
+
+            text += "Columns:\n"
+
+            for column in table["columns"]:
+
+                nullable = "NULL" if column["nullable"] else "NOT NULL"
+
+                text += (
+                    f"- {column['name']} "
+                    f"({column['type']}, {nullable})\n"
+                )
+
+            text += "\nPrimary Keys:\n"
+
+            for pk in table["primary_key"]:
+                text += f"- {pk}\n"
+
+            text += "\nForeign Keys:\n"
+
+            if table["foreign_keys"]:
+
+                for fk in table["foreign_keys"]:
+
+                    text += (
+                        f"- {fk['constrained_columns'][0]}"
+                        f" -> "
+                        f"{fk['referred_table']}."
+                        f"{fk['referred_columns'][0]}\n"
+                    )
+
+            else:
+
+                text += "None\n"
+
+            documents.append(
+                {
+                    "table": table_name,
+                    "text": text,
+                }
+            )
+
+        return documents
+
+
+schema_builder = SchemaBuilder()
 
 
 ================================================================================
 ./backend/app/services/database/registry.py
 ================================================================================
 
+from uuid import UUID
 
+from sqlalchemy.orm import Session
+
+from app.models.database_connection import DatabaseConnection
+from app.repositories.database_connection_repository import (
+    DatabaseConnectionRepository,
+)
+
+
+class DatabaseRegistryService:
+
+    def __init__(self):
+
+        self.repository = DatabaseConnectionRepository()
+
+    def create_connection(
+        self,
+        db: Session,
+        *,
+        name: str,
+        db_type: str,
+        host: str,
+        port: int,
+        database_name: str,
+        username: str,
+        password: str,
+    ) -> DatabaseConnection:
+
+        connection = DatabaseConnection(
+            name=name,
+            db_type=db_type,
+            host=host,
+            port=port,
+            database_name=database_name,
+            username=username,
+            password=password,
+        )
+
+        return self.repository.create(
+            db,
+            connection,
+        )
+
+    def get_connection(
+        self,
+        db: Session,
+        connection_id: UUID,
+    ) -> DatabaseConnection | None:
+
+        return self.repository.get(
+            db,
+            connection_id,
+        )
+
+    def list_connections(
+        self,
+        db: Session,
+    ) -> list[DatabaseConnection]:
+
+        return self.repository.list(db)
+
+    def update_connection(
+        self,
+        db: Session,
+        connection: DatabaseConnection,
+    ) -> DatabaseConnection:
+
+        return self.repository.update(
+            db,
+            connection,
+        )
+
+    def delete_connection(
+        self,
+        db: Session,
+        connection: DatabaseConnection,
+    ):
+
+        self.repository.delete(
+            db,
+            connection,
+        )
+
+
+database_registry = DatabaseRegistryService()
 
 
 ================================================================================
