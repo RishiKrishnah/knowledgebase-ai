@@ -31,52 +31,57 @@ async def chat(
     request: ChatRequest,
     db: Session = Depends(get_db),
 ):
+    try:
+        history = conversation_service.history(
+            request.session_id
+        )
 
-    history = conversation_service.history(
-        request.session_id
-    )
+        intent = await classify(request.question)
 
-    intent = await classify(request.question)
+        if intent == Intent.CHAT:
 
-    if intent == Intent.CHAT:
+            answer = await chat_answer(
+                request.question,
+                history,
+            )
 
-        answer = await chat_answer(
+        elif intent == Intent.DOCUMENT:
+
+            answer = await rag_answer(
+                request.question,
+            )
+
+        else:
+
+            result = await database_agent.answer(
+                db=db,
+                question=request.question,
+            )
+
+            answer = await sql_response_generator.generate(
+                question=request.question,
+                sql=result["sql"],
+                rows=result["rows"],
+            )
+
+        conversation_service.add_message(
+            request.session_id,
+            "user",
             request.question,
-            history,
         )
 
-    elif intent == Intent.DOCUMENT:
-
-        answer = await rag_answer(
-            request.question,
+        conversation_service.add_message(
+            request.session_id,
+            "assistant",
+            answer,
         )
 
-    else:
+        return {
+            "intent": intent.value,
+            "answer": answer,
+        }
+    except Exception as e:
 
-        result = await database_agent.answer(
-            db=db,
-            question=request.question,
-        )
-
-        answer = await sql_response_generator.generate(
-            question=request.question,
-            sql=result["sql"],
-            rows=result["rows"],
-        )
-
-    conversation_service.add_message(
-        request.session_id,
-        "user",
-        request.question,
-    )
-
-    conversation_service.add_message(
-        request.session_id,
-        "assistant",
-        answer,
-    )
-
-    return {
-        "intent": intent.value,
-        "answer": answer,
-    }
+        return {
+            "error": str(e)
+        }

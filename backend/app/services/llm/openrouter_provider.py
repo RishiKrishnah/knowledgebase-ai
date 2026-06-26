@@ -1,3 +1,5 @@
+from urllib import response
+
 import httpx
 
 from app.core.config import settings
@@ -30,9 +32,17 @@ class OpenRouterProvider:
                 json=payload
             )
 
+        response.raise_for_status()
+
         data = response.json()
 
-        return data["choices"][0]["message"]["content"]
+        try:
+            return data["choices"][0]["message"]["content"]
+
+        except Exception:
+            raise RuntimeError(
+                f"Unexpected OpenRouter response: {data}"
+            )
     
     async def generate_messages(self, messages):
 
@@ -59,6 +69,13 @@ class OpenRouterProvider:
 
         response.raise_for_status()
 
+
         data = response.json()
 
-        return data["choices"][0]["message"]["content"]
+        try:
+            return data["choices"][0]["message"]["content"]
+
+        except Exception:
+            raise RuntimeError(
+                f"Unexpected OpenRouter response: {data}"
+            )

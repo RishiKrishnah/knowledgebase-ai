@@ -4,7 +4,7 @@ The user asked:
 
 {question}
 
-The executed SQL was:
+The following SQL was executed:
 
 {sql}
 
@@ -12,6 +12,8 @@ The SQL returned:
 
 {rows}
 
-Write a concise natural-language answer.
+Answer the user's question naturally.
+
+If the SQL returned no rows, explain that clearly.
 
 Do not mention SQL unless the user explicitly asks.

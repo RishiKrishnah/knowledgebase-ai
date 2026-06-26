@@ -10,11 +10,30 @@ from app.services.database.schema_builder import schema_builder
 
 from app.services.embeddings.bge_embedding import get_embedding
 from app.services.retrieval.client import get_qdrant_client
+from qdrant_client.models import Distance, VectorParams
 
 COLLECTION_NAME = "database_schema"
 
 client = get_qdrant_client()
 
+
+collections = client.get_collections().collections
+
+exists = any(
+    c.name == COLLECTION_NAME
+    for c in collections
+)
+
+if exists:
+    client.delete_collection(COLLECTION_NAME)
+
+client.create_collection(
+    collection_name=COLLECTION_NAME,
+    vectors_config=VectorParams(
+        size=384,
+        distance=Distance.COSINE,
+    ),
+)
 
 def ingest_schema():
 
@@ -22,7 +41,12 @@ def ingest_schema():
 
     try:
 
-        connection = database_registry.list_connections(db)[0]
+        connections = database_registry.list_connections(db)
+
+        connection = next(
+            c for c in connections
+            if c.name == "School Database"
+        )
 
         engine = database_connector.connect(connection)
 

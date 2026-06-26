@@ -86,6 +86,9 @@
                     executor.py
                     test_schema_retriever.py
                     schema_retriever.py
+                    test_excel_importer.py
+                    excel_importer.py
+                    test_executor.py
                     test_schema_builder.py
                     test_connector.py
                     schema_cache.py
@@ -108,6 +111,7 @@
                     document_builder.py
             core/
                 __init__.py
+                exceptions.py
                 config.py
     docs/
     infrastructure/
@@ -807,6 +811,9 @@ print(f"Generated {OUTPUT_FILE}")
                     executor.py
                     test_schema_retriever.py
                     schema_retriever.py
+                    test_excel_importer.py
+                    excel_importer.py
+                    test_executor.py
                     test_schema_builder.py
                     test_connector.py
                     schema_cache.py
@@ -829,6 +836,7 @@ print(f"Generated {OUTPUT_FILE}")
                     document_builder.py
             core/
                 __init__.py
+                exceptions.py
                 config.py
     docs/
     infrastructure/
@@ -2172,55 +2180,60 @@ async def chat(
     request: ChatRequest,
     db: Session = Depends(get_db),
 ):
+    try:
+        history = conversation_service.history(
+            request.session_id
+        )
 
-    history = conversation_service.history(
-        request.session_id
-    )
+        intent = await classify(request.question)
 
-    intent = await classify(request.question)
+        if intent == Intent.CHAT:
 
-    if intent == Intent.CHAT:
+            answer = await chat_answer(
+                request.question,
+                history,
+            )
 
-        answer = await chat_answer(
+        elif intent == Intent.DOCUMENT:
+
+            answer = await rag_answer(
+                request.question,
+            )
+
+        else:
+
+            result = await database_agent.answer(
+                db=db,
+                question=request.question,
+            )
+
+            answer = await sql_response_generator.generate(
+                question=request.question,
+                sql=result["sql"],
+                rows=result["rows"],
+            )
+
+        conversation_service.add_message(
+            request.session_id,
+            "user",
             request.question,
-            history,
         )
 
-    elif intent == Intent.DOCUMENT:
-
-        answer = await rag_answer(
-            request.question,
+        conversation_service.add_message(
+            request.session_id,
+            "assistant",
+            answer,
         )
 
-    else:
+        return {
+            "intent": intent.value,
+            "answer": answer,
+        }
+    except Exception as e:
 
-        result = await database_agent.answer(
-            db=db,
-            question=request.question,
-        )
-
-        answer = await sql_response_generator.generate(
-            question=request.question,
-            sql=result["sql"],
-            rows=result["rows"],
-        )
-
-    conversation_service.add_message(
-        request.session_id,
-        "user",
-        request.question,
-    )
-
-    conversation_service.add_message(
-        request.session_id,
-        "assistant",
-        answer,
-    )
-
-    return {
-        "intent": intent.value,
-        "answer": answer,
-    }
+        return {
+            "error": str(e)
+        }
 
 
 ================================================================================
@@ -3155,7 +3168,7 @@ The user asked:
 
 {question}
 
-The executed SQL was:
+The following SQL was executed:
 
 {sql}
 
@@ -3163,7 +3176,9 @@ The SQL returned:
 
 {rows}
 
-Write a concise natural-language answer.
+Answer the user's question naturally.
+
+If the SQL returned no rows, explain that clearly.
 
 Do not mention SQL unless the user explicitly asks.
 
@@ -3471,6 +3486,8 @@ for query in queries:
 ./backend/app/services/llm/openrouter_provider.py
 ================================================================================
 
+from urllib import response
+
 import httpx
 
 from app.core.config import settings
@@ -3503,9 +3520,17 @@ class OpenRouterProvider:
                 json=payload
             )
 
+        response.raise_for_status()
+
         data = response.json()
 
-        return data["choices"][0]["message"]["content"]
+        try:
+            return data["choices"][0]["message"]["content"]
+
+        except Exception:
+            raise RuntimeError(
+                f"Unexpected OpenRouter response: {data}"
+            )
     
     async def generate_messages(self, messages):
 
@@ -3532,9 +3557,16 @@ class OpenRouterProvider:
 
         response.raise_for_status()
 
+
         data = response.json()
 
-        return data["choices"][0]["message"]["content"]
+        try:
+            return data["choices"][0]["message"]["content"]
+
+        except Exception:
+            raise RuntimeError(
+                f"Unexpected OpenRouter response: {data}"
+            )
 
 
 ================================================================================
@@ -3964,11 +3996,30 @@ from app.services.database.schema_builder import schema_builder
 
 from app.services.embeddings.bge_embedding import get_embedding
 from app.services.retrieval.client import get_qdrant_client
+from qdrant_client.models import Distance, VectorParams
 
 COLLECTION_NAME = "database_schema"
 
 client = get_qdrant_client()
 
+
+collections = client.get_collections().collections
+
+exists = any(
+    c.name == COLLECTION_NAME
+    for c in collections
+)
+
+if exists:
+    client.delete_collection(COLLECTION_NAME)
+
+client.create_collection(
+    collection_name=COLLECTION_NAME,
+    vectors_config=VectorParams(
+        size=384,
+        distance=Distance.COSINE,
+    ),
+)
 
 def ingest_schema():
 
@@ -3976,7 +4027,12 @@ def ingest_schema():
 
     try:
 
-        connection = database_registry.list_connections(db)[0]
+        connections = database_registry.list_connections(db)
+
+        connection = next(
+            c for c in connections
+            if c.name == "School Database"
+        )
 
         engine = database_connector.connect(connection)
 
@@ -4091,6 +4147,154 @@ def retrieve_schema(
         contexts.append(hit.payload["text"])
 
     return "\n\n".join(contexts)
+
+
+================================================================================
+./backend/app/services/database/test_excel_importer.py
+================================================================================
+
+from pathlib import Path
+
+from app.db.session import SessionLocal
+
+from app.services.database.registry import database_registry
+from app.services.database.excel_importer import excel_importer
+
+
+db = SessionLocal()
+
+try:
+
+    #
+    # Find School Database
+    #
+
+    connections = database_registry.list_connections(db)
+
+    connection = next(
+        c
+        for c in connections
+        if c.name == "School Database"
+    )
+
+    excel_importer.import_workbook(
+        connection=connection,
+        excel_path=Path("data/SchoolDB.xlsx"),
+    )
+
+finally:
+
+    db.close()
+
+
+================================================================================
+./backend/app/services/database/excel_importer.py
+================================================================================
+
+from pathlib import Path
+
+import pandas as pd
+
+from sqlalchemy import text
+
+from app.services.database.connector import database_connector
+
+
+class ExcelImporter:
+
+    def import_workbook(
+        self,
+        connection,
+        excel_path: str | Path,
+    ):
+
+        excel_path = Path(excel_path)
+
+        if not excel_path.exists():
+            raise FileNotFoundError(excel_path)
+
+        engine = database_connector.connect(connection)
+
+        workbook = pd.ExcelFile(excel_path)
+
+        print()
+
+        print(f"Workbook: {excel_path.name}")
+
+        print()
+
+        print("Sheets:")
+
+        print(workbook.sheet_names)
+
+        with engine.begin() as conn:
+
+            for sheet in workbook.sheet_names:
+
+                print(f"\nImporting {sheet}...")
+
+                df = pd.read_excel(
+                    workbook,
+                    sheet_name=sheet,
+                )
+
+                #
+                # Clean column names
+                #
+
+                df.columns = [
+                    str(c)
+                    .strip()
+                    .lower()
+                    .replace(" ", "_")
+                    for c in df.columns
+                ]
+
+                #
+                # Replace table
+                #
+
+                df.to_sql(
+                    name=sheet.lower(),
+                    con=conn,
+                    if_exists="replace",
+                    index=False,
+                )
+
+                print(
+                    f"Imported {len(df)} rows."
+                )
+
+        print()
+
+        print("Import completed.")
+
+
+excel_importer = ExcelImporter()
+
+
+================================================================================
+./backend/app/services/database/test_executor.py
+================================================================================
+
+from app.db.session import SessionLocal
+
+from app.services.database.registry import database_registry
+from app.services.database.connector import database_connector
+from app.services.database.executor import database_executor
+
+db = SessionLocal()
+
+connection = database_registry.list_connections(db)[0]
+
+engine = database_connector.connect(connection)
+
+rows = database_executor.execute(
+    engine,
+    "SELECT COUNT(*) AS total FROM users;"
+)
+
+print(rows)
 
 
 ================================================================================
@@ -4247,46 +4451,50 @@ class DatabaseAgent:
         #
         # Step 1
         #
+        try:
+            schema = retrieve_schema(question)
 
-        schema = retrieve_schema(question)
+            #
+            # Step 2
+            #
 
-        #
-        # Step 2
-        #
+            sql = await sql_generator.generate(
+                question=question,
+                schema=schema,
+            )
 
-        sql = await sql_generator.generate(
-            question=question,
-            schema=schema,
-        )
+            #
+            # Step 3
+            #
 
-        #
-        # Step 3
-        #
+            validated_sql = sql_validator.validate(sql)
 
-        validated_sql = sql_validator.validate(sql)
+            #
+            # Step 4
+            #
 
-        #
-        # Step 4
-        #
+            connection = database_registry.list_connections(db)[0]
 
-        connection = database_registry.list_connections(db)[0]
+            engine = database_connector.connect(connection)
 
-        engine = database_connector.connect(connection)
+            #
+            # Step 5
+            #
 
-        #
-        # Step 5
-        #
+            rows = database_executor.execute(
+                engine,
+                validated_sql,
+            )
 
-        rows = database_executor.execute(
-            engine,
-            validated_sql,
-        )
+            return {
+                "sql": validated_sql,
+                "rows": rows,
+            }
+        except Exception as e:
 
-        return {
-            "sql": validated_sql,
-            "rows": rows,
-        }
-
+            raise RuntimeError(
+                f"DatabaseAgent failed: {e}"
+            )
 
 database_agent = DatabaseAgent()
 
@@ -4657,6 +4865,41 @@ def row_to_document(row):
 ================================================================================
 
 
+
+
+================================================================================
+./backend/app/core/exceptions.py
+================================================================================
+
+from fastapi import HTTPException
+
+
+class ChatException(HTTPException):
+    def __init__(self, detail: str):
+        super().__init__(
+            status_code=500,
+            detail=detail,
+        )
+
+
+class DatabaseAgentException(ChatException):
+    pass
+
+
+class SQLGenerationException(ChatException):
+    pass
+
+
+class SQLExecutionException(ChatException):
+    pass
+
+
+class RetrievalException(ChatException):
+    pass
+
+
+class LLMException(ChatException):
+    pass
 
 
 ================================================================================

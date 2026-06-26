@@ -21,45 +21,49 @@ class DatabaseAgent:
         #
         # Step 1
         #
+        try:
+            schema = retrieve_schema(question)
 
-        schema = retrieve_schema(question)
+            #
+            # Step 2
+            #
 
-        #
-        # Step 2
-        #
+            sql = await sql_generator.generate(
+                question=question,
+                schema=schema,
+            )
 
-        sql = await sql_generator.generate(
-            question=question,
-            schema=schema,
-        )
+            #
+            # Step 3
+            #
 
-        #
-        # Step 3
-        #
+            validated_sql = sql_validator.validate(sql)
 
-        validated_sql = sql_validator.validate(sql)
+            #
+            # Step 4
+            #
 
-        #
-        # Step 4
-        #
+            connection = database_registry.list_connections(db)[0]
 
-        connection = database_registry.list_connections(db)[0]
+            engine = database_connector.connect(connection)
 
-        engine = database_connector.connect(connection)
+            #
+            # Step 5
+            #
 
-        #
-        # Step 5
-        #
+            rows = database_executor.execute(
+                engine,
+                validated_sql,
+            )
 
-        rows = database_executor.execute(
-            engine,
-            validated_sql,
-        )
+            return {
+                "sql": validated_sql,
+                "rows": rows,
+            }
+        except Exception as e:
 
-        return {
-            "sql": validated_sql,
-            "rows": rows,
-        }
-
+            raise RuntimeError(
+                f"DatabaseAgent failed: {e}"
+            )
 
 database_agent = DatabaseAgent()
