@@ -7,7 +7,9 @@ IGNORE_DIRS = {
     "__pycache__",
     ".git",
     ".idea",
-    ".vscode"
+    ".vscode",
+    "node_modules"
+
 }
 
 INCLUDE_EXTENSIONS = {
