@@ -12,58 +12,170 @@ interface ChatStore {
 
   loading: boolean;
 
-  createSession: (session: ChatSession) => void;
+  sessionsLoading: boolean;
 
-  selectSession: (id: string) => void;
+  messagesLoading: boolean;
+
+  sessionsInitialized: boolean;
+
+  setSessions: (
+    sessions: ChatSession[]
+  ) => void;
+
+  addSession: (
+    session: ChatSession
+  ) => void;
+
+  selectSession: (
+    id: string
+  ) => void;
+
+  setSessionMessages: (
+    sessionId: string,
+    messages: ChatMessage[]
+  ) => void;
 
   addMessage: (
     sessionId: string,
     message: ChatMessage
   ) => void;
 
-  setLoading: (loading: boolean) => void;
+  setLoading: (
+    loading: boolean
+  ) => void;
+
+  setSessionsLoading: (
+    loading: boolean
+  ) => void;
+
+  setMessagesLoading: (
+    loading: boolean
+  ) => void;
+
+  setSessionsInitialized: (
+    initialized: boolean
+  ) => void;
 }
 
-export const useChatStore = create<ChatStore>((set) => ({
-  sessions: [],
+export const useChatStore =
+  create<ChatStore>((set) => ({
+    sessions: [],
 
-  currentSessionId: "",
+    currentSessionId: "",
 
-  loading: false,
+    loading: false,
 
-  createSession(session) {
-    set((state) => ({
-      sessions: [session, ...state.sessions],
-      currentSessionId: session.id,
-    }));
-  },
+    sessionsLoading: false,
 
-  selectSession(id) {
-    set({
-      currentSessionId: id,
-    });
-  },
+    messagesLoading: false,
 
-  addMessage(sessionId, message) {
-    set((state) => ({
-      sessions: state.sessions.map((session) =>
-        session.id === sessionId
-          ? {
-              ...session,
-              updatedAt: new Date().toISOString(),
-              messages: [
-                ...session.messages,
-                message,
-              ],
-            }
-          : session
-      ),
-    }));
-  },
+    sessionsInitialized: false,
 
-  setLoading(loading) {
-    set({
-      loading,
-    });
-  },
-}));
+    setSessions(sessions) {
+      set({
+        sessions,
+      });
+    },
+
+    addSession(session) {
+      set((state) => ({
+        sessions: [
+          session,
+          ...state.sessions,
+        ],
+
+        currentSessionId:
+          session.id,
+      }));
+    },
+
+    selectSession(id) {
+      set({
+        currentSessionId: id,
+      });
+    },
+
+    setSessionMessages(
+      sessionId,
+      messages
+    ) {
+      set((state) => ({
+        sessions:
+          state.sessions.map(
+            (session) =>
+              session.id === sessionId
+                ? {
+                    ...session,
+
+                    messages,
+
+                    updatedAt:
+                      messages.length > 0
+                        ? messages[
+                            messages.length - 1
+                          ].timestamp
+                        : session.updatedAt,
+                  }
+                : session
+          ),
+      }));
+    },
+
+    addMessage(
+      sessionId,
+      message
+    ) {
+      set((state) => ({
+        sessions:
+          state.sessions.map(
+            (session) =>
+              session.id === sessionId
+                ? {
+                    ...session,
+
+                    updatedAt:
+                      message.timestamp,
+
+                    messages: [
+                      ...session.messages,
+                      message,
+                    ],
+                  }
+                : session
+          ),
+      }));
+    },
+
+    setLoading(loading) {
+      set({
+        loading,
+      });
+    },
+
+    setSessionsLoading(
+      loading
+    ) {
+      set({
+        sessionsLoading:
+          loading,
+      });
+    },
+
+    setMessagesLoading(
+      loading
+    ) {
+      set({
+        messagesLoading:
+          loading,
+      });
+    },
+
+    setSessionsInitialized(
+      initialized
+    ) {
+      set({
+        sessionsInitialized:
+          initialized,
+      });
+    },
+  }));

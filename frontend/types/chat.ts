@@ -65,8 +65,28 @@ export interface ChatResponse {
   latency?: number;
 }
 
+export interface SessionResponse {
+  id: string;
+
+  title: string;
+
+  created_at: string;
+}
+
+export interface MessageResponse {
+  id: string;
+
+  role: MessageRole;
+
+  content: string;
+
+  created_at: string;
+}
+
 export interface ApiError {
   detail?: string;
+
   message?: string;
+
   code?: string;
 }

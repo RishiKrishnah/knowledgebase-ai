@@ -1,10 +1,21 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import {
+  useEffect,
+  useRef,
+} from "react";
 
-import { chatService } from "@/services/chat";
-import { sessionService } from "@/services/sessions";
-import { useChatStore } from "@/store/chatStore";
+import {
+  chatService,
+} from "@/services/chat";
+
+import {
+  sessionService,
+} from "@/services/sessions";
+
+import {
+  useChatStore,
+} from "@/store/chatStore";
 
 import ChatMessageItem from "./ChatMessage";
 import EmptyState from "./EmptyState";
@@ -12,131 +23,223 @@ import MessageInput from "./MessageInput";
 import TypingIndicator from "./TypingIndicator";
 
 export default function ChatWindow() {
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const bottomRef =
+    useRef<HTMLDivElement>(null);
 
   const {
     sessions,
     currentSessionId,
     loading,
-    createSession,
+    messagesLoading,
     addMessage,
     setLoading,
+    setMessagesLoading,
+    setSessionMessages,
   } = useChatStore();
 
-  const currentSession = sessions.find(
-    (session) => session.id === currentSessionId
-  );
+  const currentSession =
+    sessions.find(
+      (session) =>
+        session.id ===
+        currentSessionId
+    );
 
-  const messages = currentSession?.messages ?? [];
+  const messages =
+    currentSession?.messages ?? [];
 
+  /*
+   * Load messages from the backend
+   * whenever the active session changes.
+   */
   useEffect(() => {
-    async function initializeSession() {
-      if (currentSessionId) {
-        return;
-      }
+    if (!currentSessionId) {
+      return;
+    }
+
+    async function loadMessages() {
+      setMessagesLoading(true);
 
       try {
-        const session =
-          await sessionService.createSession();
+        const serverMessages =
+          await sessionService.listMessages(
+            currentSessionId
+          );
 
-        const now = new Date().toISOString();
+        const mappedMessages =
+          serverMessages.map(
+            (message) =>
+              sessionService.mapMessage(
+                message
+              )
+          );
 
-        createSession({
-          id: session.id,
-          title: session.title ?? "New Chat",
-          createdAt:
-            session.created_at ?? now,
-          updatedAt:
-            session.created_at ?? now,
-          messages: [],
-        });
+        setSessionMessages(
+          currentSessionId,
+          mappedMessages
+        );
       } catch (error) {
         console.error(
-          "Failed to create chat session:",
+          "Failed to load session messages:",
           error
+        );
+      } finally {
+        setMessagesLoading(
+          false
         );
       }
     }
 
-    initializeSession();
-  }, [currentSessionId, createSession]);
+    loadMessages();
+  }, [
+    currentSessionId,
+    setMessagesLoading,
+    setSessionMessages,
+  ]);
 
+  /*
+   * Keep the chat scrolled to the
+   * latest message.
+   */
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({
-      behavior: "smooth",
-    });
-  }, [messages, loading]);
+    bottomRef.current?.scrollIntoView(
+      {
+        behavior: "smooth",
+      }
+    );
+  }, [
+    messages,
+    loading,
+  ]);
 
-  async function handleSend(question: string) {
+  async function handleSend(
+    question: string
+  ) {
     if (!currentSessionId) {
       console.error(
-        "Cannot send message: no active session"
+        "Cannot send message: no active session."
       );
+
       return;
     }
 
-    addMessage(currentSessionId, {
+    const timestamp =
+      new Date().toISOString();
+
+    const temporaryUserMessage = {
       id: crypto.randomUUID(),
-      role: "user",
+
+      role: "user" as const,
+
       content: question,
-      timestamp: new Date().toISOString(),
-      status: "sent",
-    });
+
+      timestamp,
+
+      status: "sent" as const,
+    };
+
+    addMessage(
+      currentSessionId,
+      temporaryUserMessage
+    );
 
     setLoading(true);
 
     try {
       const response =
-        await chatService.sendMessage({
-          session_id: currentSessionId,
-          question,
-        });
+        await chatService.sendMessage(
+          {
+            session_id:
+              currentSessionId,
 
-      addMessage(currentSessionId, {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: response.answer,
-        timestamp: new Date().toISOString(),
-        status: "sent",
-        intent: response.intent,
-        latency: response.latency,
-        sources: response.sources,
-      });
+            question,
+          }
+        );
+
+      addMessage(
+        currentSessionId,
+        {
+          id: crypto.randomUUID(),
+
+          role: "assistant",
+
+          content:
+            response.answer,
+
+          timestamp:
+            new Date().toISOString(),
+
+          status: "sent",
+
+          intent:
+            response.intent,
+
+          latency:
+            response.latency,
+
+          sources:
+            response.sources,
+        }
+      );
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
           : "Unable to contact backend.";
 
-      addMessage(currentSessionId, {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: message,
-        timestamp: new Date().toISOString(),
-        status: "error",
-      });
+      addMessage(
+        currentSessionId,
+        {
+          id: crypto.randomUUID(),
+
+          role: "assistant",
+
+          content: message,
+
+          timestamp:
+            new Date().toISOString(),
+
+          status: "error",
+        }
+      );
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="flex h-[calc(100vh-64px)] flex-col">
+    <div className="flex h-full flex-col">
       <div className="flex-1 overflow-y-auto">
-        {messages.length === 0 ? (
+        {messagesLoading ? (
+          <div className="flex h-full items-center justify-center">
+            <p className="text-sm text-muted-foreground">
+              Loading conversation...
+            </p>
+          </div>
+        ) : messages.length ===
+          0 ? (
           <EmptyState />
         ) : (
           <div className="mx-auto flex max-w-4xl flex-col gap-6 p-8">
-            {messages.map((message) => (
-              <ChatMessageItem
-                key={message.id}
-                message={message}
-              />
-            ))}
+            {messages.map(
+              (message) => (
+                <ChatMessageItem
+                  key={
+                    message.id
+                  }
+                  message={
+                    message
+                  }
+                />
+              )
+            )}
 
-            {loading && <TypingIndicator />}
+            {loading && (
+              <TypingIndicator />
+            )}
 
-            <div ref={bottomRef} />
+            <div
+              ref={bottomRef}
+            />
           </div>
         )}
       </div>

@@ -4,10 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
+
 from app.models.chat_session import ChatSession
 from app.models.knowledge_base import KnowledgeBase
 from app.models.message import Message
 from app.models.user import User
+
 from app.schemas.session_schema import (
     MessageResponse,
     SessionCreate,
@@ -25,13 +27,17 @@ def get_demo_context(db: Session):
     """
     Temporary anonymous/demo context.
 
-    This will later be replaced with the authenticated
-    user from JWT authentication.
+    This provides one shared demo user until
+    real authentication/JWT user handling is
+    implemented.
     """
 
     user = (
         db.query(User)
-        .filter(User.email == "demo@knowledgebase.local")
+        .filter(
+            User.email
+            == "demo@knowledgebase.local"
+        )
         .first()
     )
 
@@ -49,8 +55,10 @@ def get_demo_context(db: Session):
     knowledge_base = (
         db.query(KnowledgeBase)
         .filter(
-            KnowledgeBase.owner_id == user.id,
-            KnowledgeBase.name == "Default Knowledge Base",
+            KnowledgeBase.owner_id
+            == user.id,
+            KnowledgeBase.name
+            == "Default Knowledge Base",
         )
         .first()
     )
@@ -66,7 +74,11 @@ def get_demo_context(db: Session):
         db.add(knowledge_base)
         db.flush()
 
-    db.commit()
+    if (
+        user.id
+        and knowledge_base.id
+    ):
+        db.commit()
 
     return user, knowledge_base
 
@@ -79,17 +91,28 @@ def create_session(
     request: SessionCreate,
     db: Session = Depends(get_db),
 ):
-    user, knowledge_base = get_demo_context(db)
+    user, knowledge_base = (
+        get_demo_context(db)
+    )
 
     session = ChatSession(
         id=uuid4(),
+
         user_id=user.id,
-        knowledge_base_id=knowledge_base.id,
-        title=request.title,
+
+        knowledge_base_id=
+            knowledge_base.id,
+
+        title=(
+            request.title.strip()
+            or "New Chat"
+        ),
     )
 
     db.add(session)
+
     db.commit()
+
     db.refresh(session)
 
     return session
@@ -106,8 +129,13 @@ def list_sessions(
 
     return (
         db.query(ChatSession)
-        .filter(ChatSession.user_id == user.id)
-        .order_by(ChatSession.created_at.desc())
+        .filter(
+            ChatSession.user_id
+            == user.id
+        )
+        .order_by(
+            ChatSession.created_at.desc()
+        )
         .all()
     )
 
@@ -125,8 +153,11 @@ def list_messages(
     session = (
         db.query(ChatSession)
         .filter(
-            ChatSession.id == session_id,
-            ChatSession.user_id == user.id,
+            ChatSession.id
+            == session_id,
+
+            ChatSession.user_id
+            == user.id,
         )
         .first()
     )
@@ -139,7 +170,12 @@ def list_messages(
 
     return (
         db.query(Message)
-        .filter(Message.session_id == session.id)
-        .order_by(Message.created_at.asc())
+        .filter(
+            Message.session_id
+            == session.id
+        )
+        .order_by(
+            Message.created_at.asc()
+        )
         .all()
     )
