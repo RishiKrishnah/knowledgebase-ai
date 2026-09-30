@@ -18,3 +18,4 @@ openpyxl
 
 python-multipart
 python-dotenv
+sqlglot
