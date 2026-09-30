@@ -62,7 +62,7 @@ services:
       # Frontend → Backend CORS
       # ========================================================
       - key: FRONTEND_ORIGIN
-        value: "https://knowledgebase-frontend-415n.onrender.com"
+        value: "https://knowledgebase-frontend-4l5n.onrender.com"
 
       # ========================================================
       # Temporary filesystem
