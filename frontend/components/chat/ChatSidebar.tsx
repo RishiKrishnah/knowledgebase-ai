@@ -25,7 +25,7 @@ export default function ChatSidebar() {
         id: session.id,
         title: session.title ?? "New Chat",
         createdAt: session.created_at ?? now,
-        updatedAt: session.updated_at ?? now,
+        updatedAt: session.created_at ?? now,
         messages: [],
       });
     } catch (error) {
