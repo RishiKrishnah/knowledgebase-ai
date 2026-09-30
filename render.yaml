@@ -93,4 +93,4 @@ services:
         value: "production"
 
       - key: NEXT_PUBLIC_API_URL
-        value: "https://knowledgebase-backend.onrender.com"
+        value: "https://knowledgebase-backend-2xj6.onrender.com"
