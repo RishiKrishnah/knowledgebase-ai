@@ -24,24 +24,31 @@ services:
       - key: DEBUG
         value: "false"
 
-      # Render PostgreSQL
+      # ========================================================
+      # Supabase PostgreSQL
+      # Set this manually in Render Dashboard
+      # ========================================================
       - key: DATABASE_URL
-        fromDatabase:
-          name: knowledgebase-db
-          property: connectionString
+        sync: false
 
+      # ========================================================
       # Qdrant Cloud
+      # ========================================================
       - key: QDRANT_URL
         sync: false
 
       - key: QDRANT_API_KEY
         sync: false
 
+      # ========================================================
       # LLM
+      # ========================================================
       - key: OPENROUTER_API_KEY
         sync: false
 
+      # ========================================================
       # Security
+      # ========================================================
       - key: JWT_SECRET
         generateValue: true
 
@@ -51,11 +58,15 @@ services:
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
         value: "15"
 
+      # ========================================================
       # Frontend → Backend CORS
+      # ========================================================
       - key: FRONTEND_ORIGIN
         value: "https://knowledgebase-frontend.onrender.com"
 
-      # Temporary filesystem only
+      # ========================================================
+      # Temporary filesystem
+      # ========================================================
       - key: UPLOAD_DIRECTORY
         value: "/tmp/knowledgebase-uploads"
 
@@ -83,13 +94,3 @@ services:
 
       - key: NEXT_PUBLIC_API_URL
         value: "https://knowledgebase-backend.onrender.com"
-
-
-# ==============================================================
-# DATABASE
-# ==============================================================
-
-databases:
-
-  - name: knowledgebase-db
-    plan: free
