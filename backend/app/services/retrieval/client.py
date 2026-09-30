@@ -7,7 +7,8 @@ from app.core.config import settings
 
 @lru_cache
 def get_qdrant_client() -> QdrantClient:
+
     return QdrantClient(
-        host=settings.QDRANT_HOST,
-        port=settings.QDRANT_PORT,
+        url=settings.QDRANT_URL,
+        api_key=settings.QDRANT_API_KEY,
     )

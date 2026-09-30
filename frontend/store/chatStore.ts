@@ -1,4 +1,5 @@
 import { create } from "zustand";
+
 import {
   ChatMessage,
   ChatSession,
@@ -11,7 +12,7 @@ interface ChatStore {
 
   loading: boolean;
 
-  createSession: () => void;
+  createSession: (session: ChatSession) => void;
 
   selectSession: (id: string) => void;
 
@@ -23,30 +24,14 @@ interface ChatStore {
   setLoading: (loading: boolean) => void;
 }
 
-function newSession(): ChatSession {
-  const id = crypto.randomUUID();
-
-  return {
-    id,
-    title: "New Chat",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    messages: [],
-  };
-}
-
-const first = newSession();
-
 export const useChatStore = create<ChatStore>((set) => ({
-  sessions: [first],
+  sessions: [],
 
-  currentSessionId: first.id,
+  currentSessionId: "",
 
   loading: false,
 
-  createSession() {
-    const session = newSession();
-
+  createSession(session) {
     set((state) => ({
       sessions: [session, ...state.sessions],
       currentSessionId: session.id,
@@ -66,7 +51,10 @@ export const useChatStore = create<ChatStore>((set) => ({
           ? {
               ...session,
               updatedAt: new Date().toISOString(),
-              messages: [...session.messages, message],
+              messages: [
+                ...session.messages,
+                message,
+              ],
             }
           : session
       ),

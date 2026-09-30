@@ -16,14 +16,7 @@ config = context.config
 
 config.set_main_option(
     "sqlalchemy.url",
-    (
-        f"postgresql://"
-        f"{settings.POSTGRES_USER}:"
-        f"{settings.POSTGRES_PASSWORD}"
-        f"@{settings.POSTGRES_HOST}:"
-        f"{settings.POSTGRES_PORT}/"
-        f"{settings.POSTGRES_DB}"
-    ),
+    settings.DATABASE_URL,
 )
 
 
