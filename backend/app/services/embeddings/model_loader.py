@@ -1,16 +1,36 @@
-from sentence_transformers import SentenceTransformer
+import os
+from huggingface_hub import InferenceClient
 
-_model = None
+_client = None
+
+MODEL_NAME = "BAAI/bge-small-en-v1.5"
 
 
-def get_model():
+def get_client():
+    global _client
 
-    global _model
+    if _client is None:
+        token = os.getenv("HF_TOKEN")
 
-    if _model is None:
-        print("Loading BGE model...")
-        _model = SentenceTransformer(
-            "BAAI/bge-small-en-v1.5"
+        if not token:
+            raise RuntimeError(
+                "HF_TOKEN environment variable is not configured."
+            )
+
+        _client = InferenceClient(
+            provider="hf-inference",
+            api_key=token,
         )
 
-    return _model
+    return _client
+
+
+def get_embedding(text: str) -> list[float]:
+    client = get_client()
+
+    result = client.feature_extraction(
+        text,
+        model=MODEL_NAME,
+    )
+
+    return result.tolist()

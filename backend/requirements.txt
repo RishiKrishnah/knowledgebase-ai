@@ -10,7 +10,7 @@ psycopg2-binary
 alembic==1.16.5
 
 qdrant-client==1.18.0
-sentence-transformers==5.5.1
+huggingface_hub
 
 numpy
 pandas==2.3.3

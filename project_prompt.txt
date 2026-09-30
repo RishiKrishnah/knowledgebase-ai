@@ -1867,13 +1867,13 @@ services:
     rootDir: backend
 
     buildCommand: pip install -r requirements.txt
-    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
     healthCheckPath: /health
 
     envVars:
       - key: PYTHON_VERSION
-        value: "3.12.3"
+        value: "3.10.12"
 
       - key: DEBUG
         value: "false"
