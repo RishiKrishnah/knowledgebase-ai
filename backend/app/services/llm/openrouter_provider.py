@@ -7,7 +7,7 @@ from app.core.config import settings
 
 class OpenRouterProvider:
 
-    MODEL = "google/gemma-3-4b-it"
+    MODEL = "google/gemini-2.5-flash"
     async def generate(self, prompt: str):
 
         headers = {

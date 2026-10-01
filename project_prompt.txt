@@ -1916,7 +1916,7 @@ services:
       # Frontend → Backend CORS
       # ========================================================
       - key: FRONTEND_ORIGIN
-        value: "https://knowledgebase-frontend-415n.onrender.com"
+        value: "https://knowledgebase-frontend-4l5n.onrender.com"
 
       # ========================================================
       # Temporary filesystem
@@ -1947,7 +1947,7 @@ services:
         value: "production"
 
       - key: NEXT_PUBLIC_API_URL
-        value: "https://knowledgebase-backend.onrender.com"
+        value: "https://knowledgebase-backend-2xj6.onrender.com"
 
 
 ================================================================================
@@ -4085,7 +4085,7 @@ from app.core.config import settings
 
 class OpenRouterProvider:
 
-    MODEL = "google/gemma-3-4b-it"
+    MODEL = "google/gemini-2.5-flash"
     async def generate(self, prompt: str):
 
         headers = {
