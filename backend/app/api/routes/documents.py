@@ -22,6 +22,7 @@ from app.api.routes.sessions import (
 )
 
 from app.schemas.document_schema import (
+    DocumentListItem,
     DocumentUploadResponse,
 )
 
@@ -193,7 +194,22 @@ async def upload_document(
             status_code=500,
             detail=f"Document ingestion failed: {exc}",
         )
-    
+
+@router.get(
+    "",
+    response_model=list[DocumentListItem],
+)
+def list_documents(
+    db: Session = Depends(get_db),
+):
+    documents = (
+        db.query(Document)
+        .order_by(Document.created_at.desc())
+        .all()
+    )
+
+    return documents
+
 @router.delete("/{document_id}")
 def delete_document(
     document_id: UUID,

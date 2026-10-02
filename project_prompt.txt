@@ -2549,6 +2549,7 @@ from app.api.routes.sessions import (
 )
 
 from app.schemas.document_schema import (
+    DocumentListItem,
     DocumentUploadResponse,
 )
 
@@ -2720,7 +2721,22 @@ async def upload_document(
             status_code=500,
             detail=f"Document ingestion failed: {exc}",
         )
-    
+
+@router.get(
+    "",
+    response_model=list[DocumentListItem],
+)
+def list_documents(
+    db: Session = Depends(get_db),
+):
+    documents = (
+        db.query(Document)
+        .order_by(Document.created_at.desc())
+        .all()
+    )
+
+    return documents
+
 @router.delete("/{document_id}")
 def delete_document(
     document_id: UUID,
@@ -4120,18 +4136,38 @@ Do not mention SQL unless the user explicitly asks.
 ./backend/app/schemas/document_schema.py
 ================================================================================
 
+from datetime import datetime
+from uuid import UUID
+
 from pydantic import BaseModel
 
 
 class DocumentUploadResponse(BaseModel):
-
-    document_id: str
-
+    id: UUID
     filename: str
-
-    chunks: int
-
+    file_type: str
+    mime_type: str | None
+    file_size: int
     status: str
+    processing_stage: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class DocumentListItem(BaseModel):
+    id: UUID
+    filename: str
+    file_type: str
+    mime_type: str | None
+    file_size: int
+    status: str
+    processing_stage: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 ================================================================================
@@ -4746,23 +4782,6 @@ provider = OpenRouterProvider()
 
 
 SYSTEM_PROMPT = """
-You are an intent classifier.
-
-Your job is ONLY to classify the user's request.
-
-Return ONLY one word.
-
-CHAT
-DOCUMENT
-DATABASE
-
-Definitions:
-
-CHAT
-General conversation.
-No document lookup.
-No SQL needed.
-
 DOCUMENT
 The answer should come from uploaded documents,
 knowledge bases,
@@ -4770,39 +4789,43 @@ PDFs,
 Excel,
 Word,
 CSV,
-etc.
+TXT files,
+school policies,
+company policies,
+manuals,
+rules,
+documentation,
+or other uploaded knowledge.
 
-DATABASE
-The user is asking about structured data.
+Choose DOCUMENT when the user asks about information
+that could reasonably be contained in an uploaded document,
+even if the user does not explicitly mention the document.
 
 Examples:
 
-How many students attended yesterday?
-DATABASE
-
-List all pending invoices.
-DATABASE
-
-What is Artificial Intelligence?
-CHAT
-
-Explain Newton's Second Law from the uploaded notes.
+What is the minimum attendance requirement?
 DOCUMENT
 
-Who are you?
-CHAT
-
-Return ONLY:
-
-CHAT
-
-or
-
+What are the school timings?
 DOCUMENT
 
-or
+What documents are required for admission?
+DOCUMENT
 
-DATABASE
+What is the leave policy?
+DOCUMENT
+
+What are the rules for using school computers?
+DOCUMENT
+
+How do I apply for admission?
+DOCUMENT
+
+What is the transport policy?
+DOCUMENT
+
+What is the examination policy?
+DOCUMENT
 """
 
 
@@ -4928,20 +4951,68 @@ for hit in results:
 ./backend/app/services/retrieval/create_collection.py
 ================================================================================
 
-from qdrant_client.models import Distance, VectorParams
+from qdrant_client.models import (
+    Distance,
+    PayloadSchemaType,
+    VectorParams,
+)
+
 from app.services.retrieval.client import get_qdrant_client
+
+
+COLLECTION_NAME = "knowledge_chunks"
+VECTOR_SIZE = 384
+
 
 client = get_qdrant_client()
 
-client.recreate_collection(
-    collection_name="knowledge_chunks",
-    vectors_config=VectorParams(
-        size=384,
-        distance=Distance.COSINE
-    )
+
+# ------------------------------------------------------------
+# Create collection only if it does not exist
+# ------------------------------------------------------------
+
+collections = client.get_collections().collections
+
+collection_exists = any(
+    collection.name == COLLECTION_NAME
+    for collection in collections
 )
 
-print("Collection created.")
+
+if not collection_exists:
+
+    client.create_collection(
+        collection_name=COLLECTION_NAME,
+        vectors_config=VectorParams(
+            size=VECTOR_SIZE,
+            distance=Distance.COSINE,
+        ),
+    )
+
+    print(
+        f"Created collection: {COLLECTION_NAME}"
+    )
+
+else:
+
+    print(
+        f"Collection already exists: {COLLECTION_NAME}"
+    )
+
+
+# ------------------------------------------------------------
+# Create payload index for knowledge_base_id
+# ------------------------------------------------------------
+
+client.create_payload_index(
+    collection_name=COLLECTION_NAME,
+    field_name="knowledge_base_id",
+    field_schema=PayloadSchemaType.KEYWORD,
+)
+
+print(
+    "Payload index created for: knowledge_base_id"
+)
 
 
 ================================================================================

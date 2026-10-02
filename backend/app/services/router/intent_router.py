@@ -13,23 +13,6 @@ provider = OpenRouterProvider()
 
 
 SYSTEM_PROMPT = """
-You are an intent classifier.
-
-Your job is ONLY to classify the user's request.
-
-Return ONLY one word.
-
-CHAT
-DOCUMENT
-DATABASE
-
-Definitions:
-
-CHAT
-General conversation.
-No document lookup.
-No SQL needed.
-
 DOCUMENT
 The answer should come from uploaded documents,
 knowledge bases,
@@ -37,39 +20,43 @@ PDFs,
 Excel,
 Word,
 CSV,
-etc.
+TXT files,
+school policies,
+company policies,
+manuals,
+rules,
+documentation,
+or other uploaded knowledge.
 
-DATABASE
-The user is asking about structured data.
+Choose DOCUMENT when the user asks about information
+that could reasonably be contained in an uploaded document,
+even if the user does not explicitly mention the document.
 
 Examples:
 
-How many students attended yesterday?
-DATABASE
-
-List all pending invoices.
-DATABASE
-
-What is Artificial Intelligence?
-CHAT
-
-Explain Newton's Second Law from the uploaded notes.
+What is the minimum attendance requirement?
 DOCUMENT
 
-Who are you?
-CHAT
-
-Return ONLY:
-
-CHAT
-
-or
-
+What are the school timings?
 DOCUMENT
 
-or
+What documents are required for admission?
+DOCUMENT
 
-DATABASE
+What is the leave policy?
+DOCUMENT
+
+What are the rules for using school computers?
+DOCUMENT
+
+How do I apply for admission?
+DOCUMENT
+
+What is the transport policy?
+DOCUMENT
+
+What is the examination policy?
+DOCUMENT
 """
 
 
