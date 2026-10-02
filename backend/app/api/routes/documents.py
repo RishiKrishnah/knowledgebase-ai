@@ -1,6 +1,7 @@
 import os
 import uuid
 from pathlib import Path
+from uuid import UUID
 
 from fastapi import (
     APIRouter,
@@ -26,6 +27,14 @@ from app.schemas.document_schema import (
 
 from app.services.ingestion.document_ingestion import (
     ingest_document,
+)
+
+from app.services.retrieval.client import (
+    get_qdrant_client,
+)
+
+from qdrant_client.models import (
+    PointIdsList,
 )
 
 from app.core.config import settings
@@ -183,4 +192,80 @@ async def upload_document(
         raise HTTPException(
             status_code=500,
             detail=f"Document ingestion failed: {exc}",
+        )
+    
+@router.delete("/{document_id}")
+def delete_document(
+    document_id: UUID,
+    db: Session = Depends(get_db),
+):
+    document = (
+        db.query(Document)
+        .filter(Document.id == document_id)
+        .first()
+    )
+
+    if document is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Document not found.",
+        )
+
+    try:
+        # --------------------------------------------------
+        # Get Qdrant point IDs belonging to this document
+        # --------------------------------------------------
+
+        qdrant_point_ids = [
+            chunk.qdrant_point_id
+            for chunk in document.chunks
+        ]
+
+        # --------------------------------------------------
+        # Delete vectors from Qdrant
+        # --------------------------------------------------
+
+        if qdrant_point_ids:
+            
+
+            qdrant = get_qdrant_client()
+
+            qdrant.delete(
+                collection_name="knowledge_chunks",
+                points_selector=PointIdsList(
+                    points=qdrant_point_ids
+                ),
+            )
+
+        # --------------------------------------------------
+        # Delete stored file if one exists
+        # --------------------------------------------------
+
+        if document.storage_path:
+            stored_file = Path(document.storage_path)
+
+            if stored_file.exists():
+                stored_file.unlink()
+
+        # --------------------------------------------------
+        # Delete PostgreSQL document
+        #
+        # Chunks are deleted automatically because of the
+        # existing cascade configuration.
+        # --------------------------------------------------
+
+        db.delete(document)
+        db.commit()
+
+        return {
+            "document_id": str(document_id),
+            "status": "deleted",
+        }
+
+    except Exception as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Document deletion failed: {exc}",
         )
