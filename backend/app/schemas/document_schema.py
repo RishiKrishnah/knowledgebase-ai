@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class DocumentUploadResponse(BaseModel):
@@ -14,8 +14,13 @@ class DocumentUploadResponse(BaseModel):
     processing_stage: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    # Number of chunks generated during ingestion.
+    # This keeps the existing chat uploader working.
+    chunks: int = 0
+
+    model_config = ConfigDict(
+        from_attributes=True
+    )
 
 
 class DocumentListItem(BaseModel):
@@ -28,5 +33,6 @@ class DocumentListItem(BaseModel):
     processing_stage: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(
+        from_attributes=True
+    )

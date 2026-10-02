@@ -29,6 +29,7 @@
                     __init__.py
                     search.py
                     documents.py
+                    knowledge_bases.py
                     chat.py
                     sessions.py
                     connections.py
@@ -55,6 +56,7 @@
             schemas/
                 __init__.py
                 document_schema.py
+                knowledge_base.py
                 database_connection.py
                 chat_schema.py
                 session_schema.py
@@ -278,7 +280,41 @@
                         ssr/
                     app/
                         (dashboard)/
+                            knowledge/
+                                page/
+                                    app-paths-manifest.json
+                                    react-loadable-manifest.json
+                                    build-manifest.json
+                                    server-reference-manifest.json
+                                    next-font-manifest.json
+                            page/
+                                app-paths-manifest.json
+                                react-loadable-manifest.json
+                                build-manifest.json
+                                server-reference-manifest.json
+                                next-font-manifest.json
+                            upload/
+                                page/
+                                    app-paths-manifest.json
+                                    react-loadable-manifest.json
+                                    build-manifest.json
+                                    server-reference-manifest.json
+                                    next-font-manifest.json
+                            search/
+                                page/
+                                    app-paths-manifest.json
+                                    react-loadable-manifest.json
+                                    build-manifest.json
+                                    server-reference-manifest.json
+                                    next-font-manifest.json
                             chat/
+                                page/
+                                    app-paths-manifest.json
+                                    react-loadable-manifest.json
+                                    build-manifest.json
+                                    server-reference-manifest.json
+                                    next-font-manifest.json
+                            connections/
                                 page/
                                     app-paths-manifest.json
                                     react-loadable-manifest.json
@@ -1049,6 +1085,7 @@ print("\nImport completed successfully.")
                     __init__.py
                     search.py
                     documents.py
+                    knowledge_bases.py
                     chat.py
                     sessions.py
                     connections.py
@@ -1075,6 +1112,7 @@ print("\nImport completed successfully.")
             schemas/
                 __init__.py
                 document_schema.py
+                knowledge_base.py
                 database_connection.py
                 chat_schema.py
                 session_schema.py
@@ -1298,7 +1336,41 @@ print("\nImport completed successfully.")
                         ssr/
                     app/
                         (dashboard)/
+                            knowledge/
+                                page/
+                                    app-paths-manifest.json
+                                    react-loadable-manifest.json
+                                    build-manifest.json
+                                    server-reference-manifest.json
+                                    next-font-manifest.json
+                            page/
+                                app-paths-manifest.json
+                                react-loadable-manifest.json
+                                build-manifest.json
+                                server-reference-manifest.json
+                                next-font-manifest.json
+                            upload/
+                                page/
+                                    app-paths-manifest.json
+                                    react-loadable-manifest.json
+                                    build-manifest.json
+                                    server-reference-manifest.json
+                                    next-font-manifest.json
+                            search/
+                                page/
+                                    app-paths-manifest.json
+                                    react-loadable-manifest.json
+                                    build-manifest.json
+                                    server-reference-manifest.json
+                                    next-font-manifest.json
                             chat/
+                                page/
+                                    app-paths-manifest.json
+                                    react-loadable-manifest.json
+                                    build-manifest.json
+                                    server-reference-manifest.json
+                                    next-font-manifest.json
+                            connections/
                                 page/
                                     app-paths-manifest.json
                                     react-loadable-manifest.json
@@ -2345,10 +2417,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.chat import router as chat_router
 from app.api.routes.connections import router as connection_router
+from app.api.routes.documents import router as document_router
+from app.api.routes.knowledge_bases import (
+    router as knowledge_base_router,
+)
 from app.api.routes.search import router as search_router
 from app.api.routes.sessions import router as session_router
 from app.core.config import settings
-from app.api.routes.documents import router as document_router
+
 
 app = FastAPI(
     title="KnowledgeBase AI",
@@ -2362,7 +2438,9 @@ allowed_origins = [
 ]
 
 if settings.FRONTEND_ORIGIN:
-    allowed_origins.append(settings.FRONTEND_ORIGIN)
+    allowed_origins.append(
+        settings.FRONTEND_ORIGIN
+    )
 
 
 app.add_middleware(
@@ -2379,6 +2457,7 @@ app.include_router(search_router)
 app.include_router(connection_router)
 app.include_router(session_router)
 app.include_router(document_router)
+app.include_router(knowledge_base_router)
 
 
 @app.get("/")
@@ -2525,7 +2604,6 @@ def semantic_search(request: QuestionRequest):
 ./backend/app/api/routes/documents.py
 ================================================================================
 
-import os
 import uuid
 from pathlib import Path
 from uuid import UUID
@@ -2534,38 +2612,29 @@ from fastapi import (
     APIRouter,
     Depends,
     File,
+    Form,
     HTTPException,
     UploadFile,
 )
-
 from sqlalchemy.orm import Session
 
+from qdrant_client.models import PointIdsList
+
+from app.api.routes.sessions import get_demo_context
+from app.core.config import settings
 from app.db.session import get_db
-
 from app.models.document import Document
-
-from app.api.routes.sessions import (
-    get_demo_context,
-)
-
+from app.models.knowledge_base import KnowledgeBase
 from app.schemas.document_schema import (
     DocumentListItem,
     DocumentUploadResponse,
 )
-
 from app.services.ingestion.document_ingestion import (
     ingest_document,
 )
-
 from app.services.retrieval.client import (
     get_qdrant_client,
 )
-
-from qdrant_client.models import (
-    PointIdsList,
-)
-
-from app.core.config import settings
 
 
 router = APIRouter(
@@ -2586,12 +2655,40 @@ ALLOWED_EXTENSIONS = {
 MAX_FILE_SIZE = 20 * 1024 * 1024
 
 
+def get_user_knowledge_base(
+    db: Session,
+    knowledge_base_id: UUID,
+) -> KnowledgeBase:
+
+    user, _ = get_demo_context(db)
+
+    knowledge_base = (
+        db.query(KnowledgeBase)
+        .filter(
+            KnowledgeBase.id == knowledge_base_id,
+            KnowledgeBase.owner_id == user.id,
+        )
+        .first()
+    )
+
+    if knowledge_base is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Knowledge base not found.",
+        )
+
+    return knowledge_base
+
+
 @router.post(
     "/upload",
     response_model=DocumentUploadResponse,
 )
 async def upload_document(
     file: UploadFile = File(...),
+    knowledge_base_id: UUID | None = Form(
+        default=None
+    ),
     db: Session = Depends(get_db),
 ):
 
@@ -2600,7 +2697,6 @@ async def upload_document(
     # ------------------------------------------------------
 
     if not file.filename:
-
         raise HTTPException(
             status_code=400,
             detail="Filename is required.",
@@ -2611,7 +2707,6 @@ async def upload_document(
     ).suffix.lower()
 
     if extension not in ALLOWED_EXTENSIONS:
-
         raise HTTPException(
             status_code=400,
             detail=(
@@ -2628,14 +2723,12 @@ async def upload_document(
     contents = await file.read()
 
     if not contents:
-
         raise HTTPException(
             status_code=400,
             detail="Uploaded file is empty.",
         )
 
     if len(contents) > MAX_FILE_SIZE:
-
         raise HTTPException(
             status_code=413,
             detail=(
@@ -2645,10 +2738,26 @@ async def upload_document(
         )
 
     # ------------------------------------------------------
-    # Get current demo user / knowledge base
+    # Resolve knowledge base
+    #
+    # If knowledge_base_id is supplied:
+    #     upload into that knowledge base.
+    #
+    # If omitted:
+    #     preserve existing chat uploader behavior
+    #     and use the default knowledge base.
     # ------------------------------------------------------
 
-    _, knowledge_base = get_demo_context(db)
+    if knowledge_base_id is not None:
+
+        knowledge_base = get_user_knowledge_base(
+            db=db,
+            knowledge_base_id=knowledge_base_id,
+        )
+
+    else:
+
+        _, knowledge_base = get_demo_context(db)
 
     # ------------------------------------------------------
     # Ensure temporary upload directory exists
@@ -2722,29 +2831,94 @@ async def upload_document(
             detail=f"Document ingestion failed: {exc}",
         )
 
+
 @router.get(
     "",
     response_model=list[DocumentListItem],
 )
 def list_documents(
+    knowledge_base_id: UUID | None = None,
     db: Session = Depends(get_db),
 ):
-    documents = (
+
+    user, default_knowledge_base = (
+        get_demo_context(db)
+    )
+
+    query = (
         db.query(Document)
-        .order_by(Document.created_at.desc())
+        .join(
+            KnowledgeBase,
+            Document.knowledge_base_id
+            == KnowledgeBase.id,
+        )
+        .filter(
+            KnowledgeBase.owner_id == user.id
+        )
+    )
+
+    # ------------------------------------------------------
+    # If a KB was supplied, return documents from that KB.
+    #
+    # Otherwise preserve the old behavior and return
+    # documents from the default KB.
+    # ------------------------------------------------------
+
+    if knowledge_base_id is not None:
+
+        # Verify that this KB belongs to the user.
+        get_user_knowledge_base(
+            db=db,
+            knowledge_base_id=knowledge_base_id,
+        )
+
+        query = query.filter(
+            Document.knowledge_base_id
+            == knowledge_base_id
+        )
+
+    else:
+
+        query = query.filter(
+            Document.knowledge_base_id
+            == default_knowledge_base.id
+        )
+
+    documents = (
+        query
+        .order_by(
+            Document.created_at.desc()
+        )
         .all()
     )
 
     return documents
+
 
 @router.delete("/{document_id}")
 def delete_document(
     document_id: UUID,
     db: Session = Depends(get_db),
 ):
+
+    user, _ = get_demo_context(db)
+
+    # ------------------------------------------------------
+    # Only allow deletion of documents belonging to the
+    # current user's knowledge bases.
+    # ------------------------------------------------------
+
     document = (
         db.query(Document)
-        .filter(Document.id == document_id)
+        .join(
+            KnowledgeBase,
+            Document.knowledge_base_id
+            == KnowledgeBase.id,
+        )
+        .filter(
+            Document.id == document_id,
+            KnowledgeBase.owner_id == user.id,
+        )
         .first()
     )
 
@@ -2755,21 +2929,22 @@ def delete_document(
         )
 
     try:
+
         # --------------------------------------------------
-        # Get Qdrant point IDs belonging to this document
+        # Get Qdrant point IDs belonging to this document.
         # --------------------------------------------------
 
         qdrant_point_ids = [
             chunk.qdrant_point_id
             for chunk in document.chunks
+            if chunk.qdrant_point_id
         ]
 
         # --------------------------------------------------
-        # Delete vectors from Qdrant
+        # Delete vectors from Qdrant.
         # --------------------------------------------------
 
         if qdrant_point_ids:
-            
 
             qdrant = get_qdrant_client()
 
@@ -2781,20 +2956,22 @@ def delete_document(
             )
 
         # --------------------------------------------------
-        # Delete stored file if one exists
+        # Delete stored file if present.
         # --------------------------------------------------
 
         if document.storage_path:
-            stored_file = Path(document.storage_path)
+
+            stored_file = Path(
+                document.storage_path
+            )
 
             if stored_file.exists():
                 stored_file.unlink()
 
         # --------------------------------------------------
-        # Delete PostgreSQL document
+        # Delete PostgreSQL document.
         #
-        # Chunks are deleted automatically because of the
-        # existing cascade configuration.
+        # Existing SQLAlchemy cascade handles chunks.
         # --------------------------------------------------
 
         db.delete(document)
@@ -2806,12 +2983,269 @@ def delete_document(
         }
 
     except Exception as exc:
+
         db.rollback()
 
         raise HTTPException(
             status_code=500,
-            detail=f"Document deletion failed: {exc}",
+            detail=(
+                f"Document deletion failed: {exc}"
+            ),
         )
+
+
+================================================================================
+./backend/app/api/routes/knowledge_bases.py
+================================================================================
+
+from uuid import UUID, uuid4
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from app.api.routes.sessions import get_demo_context
+from app.db.session import get_db
+from app.models.knowledge_base import KnowledgeBase
+from app.schemas.knowledge_base import (
+    KnowledgeBaseCreate,
+    KnowledgeBaseResponse,
+    KnowledgeBaseUpdate,
+)
+
+
+router = APIRouter(
+    prefix="/knowledge-bases",
+    tags=["Knowledge Bases"],
+)
+
+
+def serialize_knowledge_base(
+    knowledge_base: KnowledgeBase,
+) -> KnowledgeBaseResponse:
+    return KnowledgeBaseResponse(
+        id=knowledge_base.id,
+        name=knowledge_base.name,
+        description=knowledge_base.description,
+        created_at=knowledge_base.created_at,
+        document_count=len(knowledge_base.documents),
+    )
+
+
+@router.get(
+    "",
+    response_model=list[KnowledgeBaseResponse],
+)
+def list_knowledge_bases(
+    db: Session = Depends(get_db),
+):
+    user, _ = get_demo_context(db)
+
+    knowledge_bases = (
+        db.query(KnowledgeBase)
+        .filter(
+            KnowledgeBase.owner_id == user.id
+        )
+        .order_by(
+            KnowledgeBase.created_at.desc()
+        )
+        .all()
+    )
+
+    return [
+        serialize_knowledge_base(kb)
+        for kb in knowledge_bases
+    ]
+
+
+@router.get(
+    "/{knowledge_base_id}",
+    response_model=KnowledgeBaseResponse,
+)
+def get_knowledge_base(
+    knowledge_base_id: UUID,
+    db: Session = Depends(get_db),
+):
+    user, _ = get_demo_context(db)
+
+    knowledge_base = (
+        db.query(KnowledgeBase)
+        .filter(
+            KnowledgeBase.id == knowledge_base_id,
+            KnowledgeBase.owner_id == user.id,
+        )
+        .first()
+    )
+
+    if knowledge_base is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Knowledge base not found.",
+        )
+
+    return serialize_knowledge_base(
+        knowledge_base
+    )
+
+
+@router.post(
+    "",
+    response_model=KnowledgeBaseResponse,
+    status_code=201,
+)
+def create_knowledge_base(
+    request: KnowledgeBaseCreate,
+    db: Session = Depends(get_db),
+):
+    user, _ = get_demo_context(db)
+
+    name = request.name.strip()
+
+    if not name:
+        raise HTTPException(
+            status_code=400,
+            detail="Knowledge base name is required.",
+        )
+
+    existing = (
+        db.query(KnowledgeBase)
+        .filter(
+            KnowledgeBase.owner_id == user.id,
+            KnowledgeBase.name == name,
+        )
+        .first()
+    )
+
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="A knowledge base with this name already exists.",
+        )
+
+    knowledge_base = KnowledgeBase(
+        id=uuid4(),
+        name=name,
+        description=(
+            request.description.strip()
+            if request.description
+            else None
+        ),
+        owner_id=user.id,
+    )
+
+    db.add(knowledge_base)
+    db.commit()
+    db.refresh(knowledge_base)
+
+    return serialize_knowledge_base(
+        knowledge_base
+    )
+
+
+@router.patch(
+    "/{knowledge_base_id}",
+    response_model=KnowledgeBaseResponse,
+)
+def update_knowledge_base(
+    knowledge_base_id: UUID,
+    request: KnowledgeBaseUpdate,
+    db: Session = Depends(get_db),
+):
+    user, _ = get_demo_context(db)
+
+    knowledge_base = (
+        db.query(KnowledgeBase)
+        .filter(
+            KnowledgeBase.id == knowledge_base_id,
+            KnowledgeBase.owner_id == user.id,
+        )
+        .first()
+    )
+
+    if knowledge_base is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Knowledge base not found.",
+        )
+
+    if request.name is not None:
+        name = request.name.strip()
+
+        if not name:
+            raise HTTPException(
+                status_code=400,
+                detail="Knowledge base name is required.",
+            )
+
+        duplicate = (
+            db.query(KnowledgeBase)
+            .filter(
+                KnowledgeBase.owner_id == user.id,
+                KnowledgeBase.name == name,
+                KnowledgeBase.id != knowledge_base_id,
+            )
+            .first()
+        )
+
+        if duplicate is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="A knowledge base with this name already exists.",
+            )
+
+        knowledge_base.name = name
+
+    if request.description is not None:
+        knowledge_base.description = (
+            request.description.strip()
+            or None
+        )
+
+    db.commit()
+    db.refresh(knowledge_base)
+
+    return serialize_knowledge_base(
+        knowledge_base
+    )
+
+
+@router.delete(
+    "/{knowledge_base_id}",
+)
+def delete_knowledge_base(
+    knowledge_base_id: UUID,
+    db: Session = Depends(get_db),
+):
+    user, _ = get_demo_context(db)
+
+    knowledge_base = (
+        db.query(KnowledgeBase)
+        .filter(
+            KnowledgeBase.id == knowledge_base_id,
+            KnowledgeBase.owner_id == user.id,
+        )
+        .first()
+    )
+
+    if knowledge_base is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Knowledge base not found.",
+        )
+
+    # Do not allow deletion of the default KB.
+    if knowledge_base.name == "Default Knowledge Base":
+        raise HTTPException(
+            status_code=400,
+            detail="The default knowledge base cannot be deleted.",
+        )
+
+    db.delete(knowledge_base)
+    db.commit()
+
+    return {
+        "id": str(knowledge_base_id),
+        "status": "deleted",
+    }
 
 
 ================================================================================
@@ -4139,7 +4573,7 @@ Do not mention SQL unless the user explicitly asks.
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class DocumentUploadResponse(BaseModel):
@@ -4152,8 +4586,13 @@ class DocumentUploadResponse(BaseModel):
     processing_stage: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    # Number of chunks generated during ingestion.
+    # This keeps the existing chat uploader working.
+    chunks: int = 0
+
+    model_config = ConfigDict(
+        from_attributes=True
+    )
 
 
 class DocumentListItem(BaseModel):
@@ -4166,8 +4605,49 @@ class DocumentListItem(BaseModel):
     processing_stage: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(
+        from_attributes=True
+    )
+
+
+================================================================================
+./backend/app/schemas/knowledge_base.py
+================================================================================
+
+from datetime import datetime
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class KnowledgeBaseCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    description: str | None = Field(
+        default=None,
+        max_length=2000,
+    )
+
+
+class KnowledgeBaseUpdate(BaseModel):
+    name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=255,
+    )
+    description: str | None = Field(
+        default=None,
+        max_length=2000,
+    )
+
+
+class KnowledgeBaseResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    description: str | None
+    created_at: datetime
+    document_count: int = 0
 
 
 ================================================================================
@@ -6131,10 +6611,15 @@ def ingest_document(
         db.refresh(document)
 
         return {
-            "document_id": str(document.id),
+            "id": document.id,
             "filename": document.filename,
-            "chunks": len(chunks),
+            "file_type": document.file_type,
+            "mime_type": document.mime_type,
+            "file_size": document.file_size,
             "status": document.status,
+            "processing_stage": document.processing_stage,
+            "created_at": document.created_at,
+            "chunks": len(chunks),
         }
 
     except Exception:
@@ -21874,9 +22359,9 @@ This version has breaking changes — APIs, conventions, and file structure may 
   "dynamicRoutes": {},
   "notFoundRoutes": [],
   "preview": {
-    "previewModeId": "62aeac3ee1c4a4b2b51d39fcc450bd5c",
-    "previewModeSigningKey": "6d6754c48358e8aa574be0c86a61c0c8ba32a4d5a1cd5d3845981485260e0cf5",
-    "previewModeEncryptionKey": "8717882193168607f9e95919129c182b2ef417e63173b19f59fc58e9524c92cc"
+    "previewModeId": "8a4441c0fcffcbf84ff6a9307389a3d5",
+    "previewModeSigningKey": "7376cd114d519a94191a21357b752db17f3533969af22c5fa201b871a4605fd1",
+    "previewModeEncryptionKey": "f59b39e18917afedb56676a2cc15a3e1e5c1430e6509794fb40988017ef7e92b"
   }
 }
 
@@ -21958,7 +22443,12 @@ This version has breaking changes — APIs, conventions, and file structure may 
 ================================================================================
 
 {
-  "/(dashboard)/chat/page": "app/(dashboard)/chat/page.js"
+  "/(dashboard)/chat/page": "app/(dashboard)/chat/page.js",
+  "/(dashboard)/connections/page": "app/(dashboard)/connections/page.js",
+  "/(dashboard)/knowledge/page": "app/(dashboard)/knowledge/page.js",
+  "/(dashboard)/page": "app/(dashboard)/page.js",
+  "/(dashboard)/search/page": "app/(dashboard)/search/page.js",
+  "/(dashboard)/upload/page": "app/(dashboard)/upload/page.js"
 }
 
 
@@ -21990,6 +22480,270 @@ This version has breaking changes — APIs, conventions, and file structure may 
 ================================================================================
 
 {}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/knowledge/page/app-paths-manifest.json
+================================================================================
+
+{
+  "/(dashboard)/knowledge/page": "app/(dashboard)/knowledge/page.js"
+}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/knowledge/page/react-loadable-manifest.json
+================================================================================
+
+{}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/knowledge/page/build-manifest.json
+================================================================================
+
+{
+  "devFiles": [],
+  "ampDevFiles": [],
+  "polyfillFiles": [
+    "static/chunks/node_modules_next_dist_build_polyfills_polyfill-nomodule.js"
+  ],
+  "lowPriorityFiles": [],
+  "rootMainFiles": [
+    "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_1xx01vv._.js",
+    "static/chunks/node_modules_next_dist_compiled_next-devtools_index_090k2jm.js",
+    "static/chunks/node_modules_next_dist_compiled_react-dom_096_9a-._.js",
+    "static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_164kp-6._.js",
+    "static/chunks/node_modules_next_dist_compiled_1amofcm._.js",
+    "static/chunks/node_modules_next_dist_client_0r5nbpw._.js",
+    "static/chunks/node_modules_next_dist_1ybzpk2._.js",
+    "static/chunks/node_modules_@swc_helpers_cjs_1r9vbqw._.js",
+    "static/chunks/_1anvha4._.js",
+    "static/chunks/turbopack-_01_ro95._.js"
+  ],
+  "pages": {},
+  "ampFirstPages": []
+}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/knowledge/page/server-reference-manifest.json
+================================================================================
+
+{
+  "node": {},
+  "edge": {}
+}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/knowledge/page/next-font-manifest.json
+================================================================================
+
+{
+  "pages": {},
+  "app": {},
+  "appUsingSizeAdjust": false,
+  "pagesUsingSizeAdjust": false
+}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/page/app-paths-manifest.json
+================================================================================
+
+{
+  "/(dashboard)/page": "app/(dashboard)/page.js"
+}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/page/react-loadable-manifest.json
+================================================================================
+
+{}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/page/build-manifest.json
+================================================================================
+
+{
+  "devFiles": [],
+  "ampDevFiles": [],
+  "polyfillFiles": [
+    "static/chunks/node_modules_next_dist_build_polyfills_polyfill-nomodule.js"
+  ],
+  "lowPriorityFiles": [],
+  "rootMainFiles": [
+    "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_1xx01vv._.js",
+    "static/chunks/node_modules_next_dist_compiled_next-devtools_index_090k2jm.js",
+    "static/chunks/node_modules_next_dist_compiled_react-dom_096_9a-._.js",
+    "static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_164kp-6._.js",
+    "static/chunks/node_modules_next_dist_compiled_1amofcm._.js",
+    "static/chunks/node_modules_next_dist_client_0r5nbpw._.js",
+    "static/chunks/node_modules_next_dist_1ybzpk2._.js",
+    "static/chunks/node_modules_@swc_helpers_cjs_1r9vbqw._.js",
+    "static/chunks/_1anvha4._.js",
+    "static/chunks/turbopack-_01_ro95._.js"
+  ],
+  "pages": {},
+  "ampFirstPages": []
+}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/page/server-reference-manifest.json
+================================================================================
+
+{
+  "node": {},
+  "edge": {}
+}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/page/next-font-manifest.json
+================================================================================
+
+{
+  "pages": {},
+  "app": {},
+  "appUsingSizeAdjust": false,
+  "pagesUsingSizeAdjust": false
+}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/upload/page/app-paths-manifest.json
+================================================================================
+
+{
+  "/(dashboard)/upload/page": "app/(dashboard)/upload/page.js"
+}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/upload/page/react-loadable-manifest.json
+================================================================================
+
+{}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/upload/page/build-manifest.json
+================================================================================
+
+{
+  "devFiles": [],
+  "ampDevFiles": [],
+  "polyfillFiles": [
+    "static/chunks/node_modules_next_dist_build_polyfills_polyfill-nomodule.js"
+  ],
+  "lowPriorityFiles": [],
+  "rootMainFiles": [
+    "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_1xx01vv._.js",
+    "static/chunks/node_modules_next_dist_compiled_next-devtools_index_090k2jm.js",
+    "static/chunks/node_modules_next_dist_compiled_react-dom_096_9a-._.js",
+    "static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_164kp-6._.js",
+    "static/chunks/node_modules_next_dist_compiled_1amofcm._.js",
+    "static/chunks/node_modules_next_dist_client_0r5nbpw._.js",
+    "static/chunks/node_modules_next_dist_1ybzpk2._.js",
+    "static/chunks/node_modules_@swc_helpers_cjs_1r9vbqw._.js",
+    "static/chunks/_1anvha4._.js",
+    "static/chunks/turbopack-_01_ro95._.js"
+  ],
+  "pages": {},
+  "ampFirstPages": []
+}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/upload/page/server-reference-manifest.json
+================================================================================
+
+{
+  "node": {},
+  "edge": {}
+}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/upload/page/next-font-manifest.json
+================================================================================
+
+{
+  "pages": {},
+  "app": {},
+  "appUsingSizeAdjust": false,
+  "pagesUsingSizeAdjust": false
+}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/search/page/app-paths-manifest.json
+================================================================================
+
+{
+  "/(dashboard)/search/page": "app/(dashboard)/search/page.js"
+}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/search/page/react-loadable-manifest.json
+================================================================================
+
+{}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/search/page/build-manifest.json
+================================================================================
+
+{
+  "devFiles": [],
+  "ampDevFiles": [],
+  "polyfillFiles": [
+    "static/chunks/node_modules_next_dist_build_polyfills_polyfill-nomodule.js"
+  ],
+  "lowPriorityFiles": [],
+  "rootMainFiles": [
+    "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_1xx01vv._.js",
+    "static/chunks/node_modules_next_dist_compiled_next-devtools_index_090k2jm.js",
+    "static/chunks/node_modules_next_dist_compiled_react-dom_096_9a-._.js",
+    "static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_164kp-6._.js",
+    "static/chunks/node_modules_next_dist_compiled_1amofcm._.js",
+    "static/chunks/node_modules_next_dist_client_0r5nbpw._.js",
+    "static/chunks/node_modules_next_dist_1ybzpk2._.js",
+    "static/chunks/node_modules_@swc_helpers_cjs_1r9vbqw._.js",
+    "static/chunks/_1anvha4._.js",
+    "static/chunks/turbopack-_01_ro95._.js"
+  ],
+  "pages": {},
+  "ampFirstPages": []
+}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/search/page/server-reference-manifest.json
+================================================================================
+
+{
+  "node": {},
+  "edge": {}
+}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/search/page/next-font-manifest.json
+================================================================================
+
+{
+  "pages": {},
+  "app": {},
+  "appUsingSizeAdjust": false,
+  "pagesUsingSizeAdjust": false
+}
 
 
 ================================================================================
@@ -22048,6 +22802,72 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ================================================================================
 ./frontend/.next/dev/server/app/(dashboard)/chat/page/next-font-manifest.json
+================================================================================
+
+{
+  "pages": {},
+  "app": {},
+  "appUsingSizeAdjust": false,
+  "pagesUsingSizeAdjust": false
+}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/connections/page/app-paths-manifest.json
+================================================================================
+
+{
+  "/(dashboard)/connections/page": "app/(dashboard)/connections/page.js"
+}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/connections/page/react-loadable-manifest.json
+================================================================================
+
+{}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/connections/page/build-manifest.json
+================================================================================
+
+{
+  "devFiles": [],
+  "ampDevFiles": [],
+  "polyfillFiles": [
+    "static/chunks/node_modules_next_dist_build_polyfills_polyfill-nomodule.js"
+  ],
+  "lowPriorityFiles": [],
+  "rootMainFiles": [
+    "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_1xx01vv._.js",
+    "static/chunks/node_modules_next_dist_compiled_next-devtools_index_090k2jm.js",
+    "static/chunks/node_modules_next_dist_compiled_react-dom_096_9a-._.js",
+    "static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_164kp-6._.js",
+    "static/chunks/node_modules_next_dist_compiled_1amofcm._.js",
+    "static/chunks/node_modules_next_dist_client_0r5nbpw._.js",
+    "static/chunks/node_modules_next_dist_1ybzpk2._.js",
+    "static/chunks/node_modules_@swc_helpers_cjs_1r9vbqw._.js",
+    "static/chunks/_1anvha4._.js",
+    "static/chunks/turbopack-_01_ro95._.js"
+  ],
+  "pages": {},
+  "ampFirstPages": []
+}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/connections/page/server-reference-manifest.json
+================================================================================
+
+{
+  "node": {},
+  "edge": {}
+}
+
+
+================================================================================
+./frontend/.next/dev/server/app/(dashboard)/connections/page/next-font-manifest.json
 ================================================================================
 
 {

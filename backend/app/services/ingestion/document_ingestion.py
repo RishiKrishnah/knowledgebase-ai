@@ -163,10 +163,15 @@ def ingest_document(
         db.refresh(document)
 
         return {
-            "document_id": str(document.id),
+            "id": document.id,
             "filename": document.filename,
-            "chunks": len(chunks),
+            "file_type": document.file_type,
+            "mime_type": document.mime_type,
+            "file_size": document.file_size,
             "status": document.status,
+            "processing_stage": document.processing_stage,
+            "created_at": document.created_at,
+            "chunks": len(chunks),
         }
 
     except Exception:
