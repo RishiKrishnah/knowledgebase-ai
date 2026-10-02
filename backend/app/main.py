@@ -6,7 +6,7 @@ from app.api.routes.connections import router as connection_router
 from app.api.routes.search import router as search_router
 from app.api.routes.sessions import router as session_router
 from app.core.config import settings
-
+from app.api.routes.documents import router as document_router
 
 app = FastAPI(
     title="KnowledgeBase AI",
@@ -36,6 +36,7 @@ app.include_router(chat_router)
 app.include_router(search_router)
 app.include_router(connection_router)
 app.include_router(session_router)
+app.include_router(document_router)
 
 
 @app.get("/")

@@ -95,6 +95,7 @@ async def chat(
 
             answer = await rag_answer(
                 request.question,
+                knowledge_base_id=session.knowledge_base_id,
             )
 
         else:

@@ -19,3 +19,6 @@ openpyxl
 python-multipart
 python-dotenv
 sqlglot
+
+pypdf
+python-docx

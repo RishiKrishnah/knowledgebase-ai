@@ -21,6 +21,7 @@ import ChatMessageItem from "./ChatMessage";
 import EmptyState from "./EmptyState";
 import MessageInput from "./MessageInput";
 import TypingIndicator from "./TypingIndicator";
+import DocumentUpload from "@/components/chat/DocumentUpload";
 
 export default function ChatWindow() {
   const bottomRef =
@@ -243,7 +244,11 @@ export default function ChatWindow() {
           </div>
         )}
       </div>
+      <div className="border-t p-4">
 
+        <DocumentUpload />
+
+      </div>
       <MessageInput
         loading={loading}
         onSend={handleSend}

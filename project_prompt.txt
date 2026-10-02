@@ -27,6 +27,7 @@
                 routes/
                     __init__.py
                     search.py
+                    documents.py
                     chat.py
                     sessions.py
                     connections.py
@@ -52,6 +53,7 @@
                 sql_response.txt
             schemas/
                 __init__.py
+                document_schema.py
                 database_connection.py
                 chat_schema.py
                 session_schema.py
@@ -112,7 +114,10 @@
                     __init__.py
                     excel_parser.py
                     ingest_excel.py
+                    document_ingestion.py
                     document_builder.py
+                    chunker.py
+                    document_parser.py
             core/
                 __init__.py
                 exceptions.py
@@ -1041,6 +1046,7 @@ print("\nImport completed successfully.")
                 routes/
                     __init__.py
                     search.py
+                    documents.py
                     chat.py
                     sessions.py
                     connections.py
@@ -1066,6 +1072,7 @@ print("\nImport completed successfully.")
                 sql_response.txt
             schemas/
                 __init__.py
+                document_schema.py
                 database_connection.py
                 chat_schema.py
                 session_schema.py
@@ -1126,7 +1133,10 @@ print("\nImport completed successfully.")
                     __init__.py
                     excel_parser.py
                     ingest_excel.py
+                    document_ingestion.py
                     document_builder.py
+                    chunker.py
+                    document_parser.py
             core/
                 __init__.py
                 exceptions.py
@@ -1922,7 +1932,6 @@ pandas==2.3.3
 pydantic==2.13.4
 pydantic_settings==2.14.2
 qdrant_client==1.18.0
-sentence_transformers==5.5.1
 SQLAlchemy==2.0.51
 alembic==1.16.5
 
@@ -2054,6 +2063,9 @@ openpyxl
 python-multipart
 python-dotenv
 sqlglot
+
+pypdf
+python-docx
 
 
 ================================================================================
@@ -2334,7 +2346,7 @@ from app.api.routes.connections import router as connection_router
 from app.api.routes.search import router as search_router
 from app.api.routes.sessions import router as session_router
 from app.core.config import settings
-
+from app.api.routes.documents import router as document_router
 
 app = FastAPI(
     title="KnowledgeBase AI",
@@ -2364,6 +2376,8 @@ app.include_router(chat_router)
 app.include_router(search_router)
 app.include_router(connection_router)
 app.include_router(session_router)
+app.include_router(session_router)
+app.include_router(document_router)
 
 
 @app.get("/")
@@ -2507,6 +2521,198 @@ def semantic_search(request: QuestionRequest):
 
 
 ================================================================================
+./backend/app/api/routes/documents.py
+================================================================================
+
+import os
+import uuid
+from pathlib import Path
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    UploadFile,
+)
+
+from sqlalchemy.orm import Session
+
+from app.db.session import get_db
+
+from app.models.document import Document
+
+from app.api.routes.sessions import (
+    get_demo_context,
+)
+
+from app.schemas.document_schema import (
+    DocumentUploadResponse,
+)
+
+from app.services.ingestion.document_ingestion import (
+    ingest_document,
+)
+
+from app.core.config import settings
+
+
+router = APIRouter(
+    prefix="/documents",
+    tags=["Documents"],
+)
+
+
+ALLOWED_EXTENSIONS = {
+    ".pdf",
+    ".docx",
+    ".txt",
+    ".csv",
+    ".xlsx",
+}
+
+
+MAX_FILE_SIZE = 20 * 1024 * 1024
+
+
+@router.post(
+    "/upload",
+    response_model=DocumentUploadResponse,
+)
+async def upload_document(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+
+    # ------------------------------------------------------
+    # Validate filename
+    # ------------------------------------------------------
+
+    if not file.filename:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Filename is required.",
+        )
+
+    extension = Path(
+        file.filename
+    ).suffix.lower()
+
+    if extension not in ALLOWED_EXTENSIONS:
+
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Unsupported file type. "
+                "Supported types: "
+                "PDF, DOCX, TXT, CSV, XLSX."
+            ),
+        )
+
+    # ------------------------------------------------------
+    # Read uploaded file
+    # ------------------------------------------------------
+
+    contents = await file.read()
+
+    if not contents:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Uploaded file is empty.",
+        )
+
+    if len(contents) > MAX_FILE_SIZE:
+
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                "File is too large. "
+                "Maximum size is 20 MB."
+            ),
+        )
+
+    # ------------------------------------------------------
+    # Get current demo user / knowledge base
+    # ------------------------------------------------------
+
+    _, knowledge_base = get_demo_context(db)
+
+    # ------------------------------------------------------
+    # Ensure temporary upload directory exists
+    # ------------------------------------------------------
+
+    upload_directory = Path(
+        settings.UPLOAD_DIRECTORY
+    )
+
+    upload_directory.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    # ------------------------------------------------------
+    # Generate temporary filename
+    # ------------------------------------------------------
+
+    temporary_filename = (
+        f"{uuid.uuid4()}{extension}"
+    )
+
+    temporary_path = (
+        upload_directory
+        / temporary_filename
+    )
+
+    # ------------------------------------------------------
+    # Save temporary file
+    # ------------------------------------------------------
+
+    try:
+
+        temporary_path.write_bytes(
+            contents
+        )
+
+        # --------------------------------------------------
+        # Run ingestion
+        # --------------------------------------------------
+
+        result = ingest_document(
+            db=db,
+            file_path=str(temporary_path),
+            filename=file.filename,
+            file_type=extension,
+            mime_type=file.content_type,
+            file_size=len(contents),
+            knowledge_base_id=knowledge_base.id,
+        )
+
+        return result
+
+    except ValueError as exc:
+
+        if temporary_path.exists():
+            temporary_path.unlink()
+
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
+
+    except Exception as exc:
+
+        if temporary_path.exists():
+            temporary_path.unlink()
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Document ingestion failed: {exc}",
+        )
+
+
+================================================================================
 ./backend/app/api/routes/chat.py
 ================================================================================
 
@@ -2607,6 +2813,7 @@ async def chat(
 
             answer = await rag_answer(
                 request.question,
+                knowledge_base_id=session.knowledge_base_id,
             )
 
         else:
@@ -3768,13 +3975,17 @@ Answer:
 ./backend/app/prompts/rag.txt
 ================================================================================
 
-You are an AI assistant.
+You are a document question-answering assistant.
 
-Answer the user's question ONLY using the provided context.
+Answer the user's question using only the provided context.
 
-If the context does not contain enough information, reply:
+If the answer cannot be determined from the provided context, say:
 
-"I don't have enough information to answer that."
+"I couldn't find that information in the uploaded documents."
+
+Do not invent facts.
+Do not use outside knowledge.
+Do not assume information that is not present in the context.
 
 Context:
 
@@ -3817,6 +4028,24 @@ Do not mention SQL unless the user explicitly asks.
 ================================================================================
 
 
+
+
+================================================================================
+./backend/app/schemas/document_schema.py
+================================================================================
+
+from pydantic import BaseModel
+
+
+class DocumentUploadResponse(BaseModel):
+
+    document_id: str
+
+    filename: str
+
+    chunks: int
+
+    status: str
 
 
 ================================================================================
@@ -4315,27 +4544,46 @@ class LLMProvider(ABC):
 
 from app.services.retrieval.search import search
 from app.services.llm.prompt_builder import build_rag_prompt
-from app.services.llm.openrouter_provider import OpenRouterProvider
+from app.services.llm.openrouter_provider import (
+    OpenRouterProvider,
+)
 
 
 provider = OpenRouterProvider()
 
 
-async def ask(question: str):
+async def ask(
+    question: str,
+    knowledge_base_id: str | None = None,
+):
 
-    hits = search(question)
+    hits = search(
+        query=question,
+        knowledge_base_id=knowledge_base_id,
+    )
 
     contexts = [
         hit.payload["text"]
         for hit in hits
+        if hit.payload
+        and hit.payload.get("text")
     ]
+
+    if not contexts:
+
+        return (
+            "I couldn't find relevant information "
+            "in the uploaded documents."
+        )
 
     prompt = build_rag_prompt(
         question,
         contexts,
     )
 
-    answer = await provider.generate(prompt)
+    answer = await provider.generate(
+        prompt
+    )
 
     return answer
 
@@ -4506,8 +4754,16 @@ Question:
 ./backend/app/services/retrieval/search.py
 ================================================================================
 
-from app.services.embeddings.bge_embedding import get_embedding
-from app.services.retrieval.client import get_qdrant_client
+from qdrant_client.models import Filter, FieldCondition, MatchValue
+
+from app.services.embeddings.bge_embedding import (
+    get_embedding,
+)
+
+from app.services.retrieval.client import (
+    get_qdrant_client,
+)
+
 
 client = get_qdrant_client()
 
@@ -4516,12 +4772,32 @@ def search(
     query: str,
     collection_name: str = "knowledge_chunks",
     limit: int = 5,
+    knowledge_base_id: str | None = None,
 ):
+
     query_vector = get_embedding(query)
+
+    query_filter = None
+
+    if knowledge_base_id:
+
+        query_filter = Filter(
+            must=[
+                FieldCondition(
+                    key="knowledge_base_id",
+                    match=MatchValue(
+                        value=str(
+                            knowledge_base_id
+                        )
+                    ),
+                )
+            ]
+        )
 
     response = client.query_points(
         collection_name=collection_name,
         query=query_vector,
+        query_filter=query_filter,
         limit=limit,
     )
 
@@ -5530,6 +5806,223 @@ if __name__ == "__main__":
 
 
 ================================================================================
+./backend/app/services/ingestion/document_ingestion.py
+================================================================================
+
+import os
+import uuid
+from pathlib import Path
+
+from qdrant_client.models import PointStruct
+
+from sqlalchemy.orm import Session
+
+from app.models.document import Document
+from app.models.chunk import Chunk
+
+from app.services.embeddings.bge_embedding import (
+    get_embedding,
+)
+
+from app.services.ingestion.chunker import (
+    chunk_text,
+)
+
+from app.services.ingestion.document_parser import (
+    extract_text,
+)
+
+from app.services.retrieval.client import (
+    get_qdrant_client,
+)
+
+
+COLLECTION_NAME = "knowledge_chunks"
+
+
+def ingest_document(
+    db: Session,
+    file_path: str,
+    filename: str,
+    file_type: str,
+    mime_type: str | None,
+    file_size: int,
+    knowledge_base_id,
+):
+
+    # ------------------------------------------------------
+    # Create document record
+    # ------------------------------------------------------
+
+    document = Document(
+        id=uuid.uuid4(),
+        knowledge_base_id=knowledge_base_id,
+        filename=filename,
+        file_type=file_type,
+        mime_type=mime_type,
+        file_size=file_size,
+        storage_path=None,
+        status="processing",
+        processing_stage="extracting",
+    )
+
+    db.add(document)
+    db.flush()
+
+    try:
+
+        # --------------------------------------------------
+        # Extract text
+        # --------------------------------------------------
+
+        text = extract_text(
+            file_path=file_path,
+            file_extension=file_type,
+        )
+
+        if not text.strip():
+            raise ValueError(
+                "No readable text was found in the document."
+            )
+
+        document.processing_stage = "chunking"
+
+        # --------------------------------------------------
+        # Chunk document
+        # --------------------------------------------------
+
+        chunks = chunk_text(text)
+
+        if not chunks:
+            raise ValueError(
+                "Document produced no chunks."
+            )
+
+        document.processing_stage = "embedding"
+
+        qdrant = get_qdrant_client()
+
+        points = []
+        chunk_records = []
+
+        # --------------------------------------------------
+        # Generate embeddings
+        # --------------------------------------------------
+
+        for index, chunk_text_value in enumerate(chunks):
+
+            embedding = get_embedding(
+                chunk_text_value
+            )
+
+            point_id = str(uuid.uuid4())
+
+            point = PointStruct(
+                id=point_id,
+                vector=embedding,
+                payload={
+                    "text": chunk_text_value,
+                    "document_id": str(document.id),
+                    "knowledge_base_id": str(
+                        knowledge_base_id
+                    ),
+                    "filename": filename,
+                    "chunk_index": index,
+                },
+            )
+
+            points.append(point)
+
+            chunk_record = Chunk(
+                id=uuid.uuid4(),
+                document_id=document.id,
+                qdrant_point_id=point_id,
+                chunk_index=index,
+                token_count=None,
+                metadata_json=None,
+                text=chunk_text_value,
+            )
+
+            chunk_records.append(
+                chunk_record
+            )
+
+        # --------------------------------------------------
+        # Insert vectors into Qdrant
+        # --------------------------------------------------
+
+        document.processing_stage = "storing"
+
+        qdrant.upsert(
+            collection_name=COLLECTION_NAME,
+            points=points,
+        )
+
+        # --------------------------------------------------
+        # Store chunk metadata in PostgreSQL
+        # --------------------------------------------------
+
+        for chunk_record in chunk_records:
+
+            db.add(chunk_record)
+
+        document.status = "ready"
+        document.processing_stage = "completed"
+
+        db.commit()
+
+        db.refresh(document)
+
+        return {
+            "document_id": str(document.id),
+            "filename": document.filename,
+            "chunks": len(chunks),
+            "status": document.status,
+        }
+
+    except Exception:
+
+        db.rollback()
+
+        # Start a fresh transaction to record failure.
+
+        try:
+
+            failed_document = (
+                db.query(Document)
+                .filter(
+                    Document.id == document.id
+                )
+                .first()
+            )
+
+            if failed_document:
+
+                failed_document.status = "failed"
+                failed_document.processing_stage = (
+                    "failed"
+                )
+
+                db.commit()
+
+        except Exception:
+
+            db.rollback()
+
+        raise
+
+    finally:
+
+        try:
+
+            os.remove(file_path)
+
+        except OSError:
+
+            pass
+
+
+================================================================================
 ./backend/app/services/ingestion/document_builder.py
 ================================================================================
 
@@ -5541,6 +6034,170 @@ def row_to_document(row):
     )
 
     return text
+
+
+================================================================================
+./backend/app/services/ingestion/chunker.py
+================================================================================
+
+def chunk_text(
+    text: str,
+    chunk_size: int = 1200,
+    overlap: int = 200,
+) -> list[str]:
+
+    text = text.strip()
+
+    if not text:
+        return []
+
+    if overlap >= chunk_size:
+        raise ValueError(
+            "overlap must be smaller than chunk_size"
+        )
+
+    chunks = []
+
+    start = 0
+    text_length = len(text)
+
+    while start < text_length:
+
+        end = min(
+            start + chunk_size,
+            text_length,
+        )
+
+        chunk = text[start:end].strip()
+
+        if chunk:
+            chunks.append(chunk)
+
+        if end >= text_length:
+            break
+
+        start = end - overlap
+
+    return chunks
+
+
+================================================================================
+./backend/app/services/ingestion/document_parser.py
+================================================================================
+
+from pathlib import Path
+
+import pandas as pd
+from docx import Document as DocxDocument
+from pypdf import PdfReader
+
+
+SUPPORTED_EXTENSIONS = {
+    ".pdf",
+    ".docx",
+    ".txt",
+    ".csv",
+    ".xlsx",
+}
+
+
+def extract_text(
+    file_path: str,
+    file_extension: str,
+) -> str:
+
+    extension = file_extension.lower()
+
+    if extension == ".pdf":
+        return _extract_pdf(file_path)
+
+    if extension == ".docx":
+        return _extract_docx(file_path)
+
+    if extension == ".txt":
+        return _extract_txt(file_path)
+
+    if extension == ".csv":
+        return _extract_csv(file_path)
+
+    if extension == ".xlsx":
+        return _extract_xlsx(file_path)
+
+    raise ValueError(
+        f"Unsupported file type: {extension}"
+    )
+
+
+def _extract_pdf(file_path: str) -> str:
+
+    reader = PdfReader(file_path)
+
+    pages = []
+
+    for page in reader.pages:
+
+        text = page.extract_text()
+
+        if text:
+            pages.append(text)
+
+    return "\n\n".join(pages)
+
+
+def _extract_docx(file_path: str) -> str:
+
+    document = DocxDocument(file_path)
+
+    paragraphs = []
+
+    for paragraph in document.paragraphs:
+
+        text = paragraph.text.strip()
+
+        if text:
+            paragraphs.append(text)
+
+    return "\n\n".join(paragraphs)
+
+
+def _extract_txt(file_path: str) -> str:
+
+    path = Path(file_path)
+
+    return path.read_text(
+        encoding="utf-8",
+        errors="ignore",
+    )
+
+
+def _extract_csv(file_path: str) -> str:
+
+    df = pd.read_csv(file_path)
+
+    return df.to_csv(
+        index=False
+    )
+
+
+def _extract_xlsx(file_path: str) -> str:
+
+    excel = pd.ExcelFile(file_path)
+
+    sheets = []
+
+    for sheet_name in excel.sheet_names:
+
+        df = pd.read_excel(
+            file_path,
+            sheet_name=sheet_name,
+        )
+
+        sheets.append(
+            f"Sheet: {sheet_name}\n"
+            f"{df.to_csv(index=False)}"
+        )
+
+    return "\n\n".join(sheets)
 
 
 ================================================================================
