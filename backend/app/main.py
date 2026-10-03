@@ -10,7 +10,7 @@ from app.api.routes.knowledge_bases import (
 from app.api.routes.search import router as search_router
 from app.api.routes.sessions import router as session_router
 from app.core.config import settings
-
+from app.api.routes.dashboard import router as dashboard_router
 
 app = FastAPI(
     title="KnowledgeBase AI",
@@ -44,6 +44,7 @@ app.include_router(connection_router)
 app.include_router(session_router)
 app.include_router(document_router)
 app.include_router(knowledge_base_router)
+app.include_router(dashboard_router)
 
 
 @app.get("/")

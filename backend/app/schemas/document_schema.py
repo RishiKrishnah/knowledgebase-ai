@@ -1,38 +1,136 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class DocumentUploadResponse(BaseModel):
-    id: UUID
-    filename: str
-    file_type: str
-    mime_type: str | None
-    file_size: int
-    status: str
-    processing_stage: str
-    created_at: datetime
+class DatabaseConnectionCreate(BaseModel):
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+    )
 
-    # Number of chunks generated during ingestion.
-    # This keeps the existing chat uploader working.
-    chunks: int = 0
+    db_type: str = Field(
+        ...,
+        min_length=1,
+        max_length=30,
+    )
+
+    host: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+    )
+
+    port: int = Field(
+        ...,
+        ge=1,
+        le=65535,
+    )
+
+    database_name: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+    )
+
+    username: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+    )
+
+    password: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+    )
+
+
+class DatabaseConnectionUpdate(BaseModel):
+    name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+    )
+
+    db_type: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=30,
+    )
+
+    host: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=255,
+    )
+
+    port: int | None = Field(
+        default=None,
+        ge=1,
+        le=65535,
+    )
+
+    database_name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=255,
+    )
+
+    username: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=255,
+    )
+
+    password: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=255,
+    )
+
+    is_active: bool | None = None
+
+
+class DatabaseConnectionResponse(BaseModel):
 
     model_config = ConfigDict(
         from_attributes=True
     )
 
+    id: UUID
+    name: str
+    db_type: str
+    host: str
+    port: int
+    database_name: str
+    username: str
+    is_active: bool
 
 class DocumentListItem(BaseModel):
+    model_config = ConfigDict(
+        from_attributes=True
+    )
+
+    id: UUID
+    filename: str
+    file_type: str
+    file_size: int
+    created_at: datetime
+
+class DocumentUploadResponse(BaseModel):
+    model_config = ConfigDict(
+        from_attributes=True
+    )
+
     id: UUID
     filename: str
     file_type: str
     mime_type: str | None
-    file_size: int
+    file_size: int | None
     status: str
     processing_stage: str
     created_at: datetime
-
-    model_config = ConfigDict(
-        from_attributes=True
-    )
+    chunks: int

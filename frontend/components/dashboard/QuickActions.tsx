@@ -1,15 +1,18 @@
 import {
+  BookOpen,
   Database,
   MessageSquare,
-  Search,
   Upload,
 } from "lucide-react";
 
 import QuickAction from "./QuickAction";
 
+
 export default function QuickActions() {
+
   return (
     <div className="grid gap-4 md:grid-cols-2">
+
       <QuickAction
         title="Start AI Chat"
         href="/chat"
@@ -17,9 +20,9 @@ export default function QuickActions() {
       />
 
       <QuickAction
-        title="Semantic Search"
-        href="/search"
-        icon={Search}
+        title="Knowledge Bases"
+        href="/knowledge"
+        icon={BookOpen}
       />
 
       <QuickAction
@@ -33,6 +36,7 @@ export default function QuickActions() {
         href="/connections"
         icon={Database}
       />
+
     </div>
   );
 }
