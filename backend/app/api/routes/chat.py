@@ -120,6 +120,7 @@ async def chat(
             session_id=session.id,
             role="user",
             content=request.question,
+            intent=intent.value,
         )
 
         db.add(user_message)

@@ -2576,6 +2576,7 @@ async def chat(
             session_id=session.id,
             role="user",
             content=request.question,
+            intent=intent.value,
         )
 
         db.add(user_message)
@@ -3592,6 +3593,15 @@ class Message(Base):
     )
 
     # ==========================
+    # Message Intent
+    # ==========================
+
+    intent: Mapped[str | None] = mapped_column(
+        String(30),
+        nullable=True,
+    )
+
+    # ==========================
     # Timestamp
     # ==========================
 
@@ -4555,6 +4565,8 @@ class MessageResponse(BaseModel):
     role: str
 
     content: str
+
+    intent: str | None = None
 
     created_at: datetime
 
@@ -7526,6 +7538,8 @@ export interface MessageResponse {
   role: MessageRole;
 
   content: string;
+
+  intent?: ChatIntent | null;
 
   created_at: string;
 }
@@ -12131,6 +12145,9 @@ class SessionService {
         message.created_at,
 
       status: "sent",
+
+      intent:
+        message.intent ?? undefined,
     };
   }
 }

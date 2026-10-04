@@ -80,6 +80,8 @@ export interface MessageResponse {
 
   content: string;
 
+  intent?: ChatIntent | null;
+
   created_at: string;
 }
 

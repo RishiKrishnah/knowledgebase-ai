@@ -50,6 +50,15 @@ class Message(Base):
     )
 
     # ==========================
+    # Message Intent
+    # ==========================
+
+    intent: Mapped[str | None] = mapped_column(
+        String(30),
+        nullable=True,
+    )
+
+    # ==========================
     # Timestamp
     # ==========================
 

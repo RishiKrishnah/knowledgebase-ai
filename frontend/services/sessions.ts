@@ -127,6 +127,9 @@ class SessionService {
         message.created_at,
 
       status: "sent",
+
+      intent:
+        message.intent ?? undefined,
     };
   }
 }

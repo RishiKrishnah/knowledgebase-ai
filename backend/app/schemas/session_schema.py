@@ -27,6 +27,8 @@ class MessageResponse(BaseModel):
 
     content: str
 
+    intent: str | None = None
+
     created_at: datetime
 
     model_config = {
